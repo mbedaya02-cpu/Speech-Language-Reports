@@ -4,5 +4,5 @@
 //  Leave it empty to be asked for the URL in the browser on first open.
 // =====================================================================
 window.APP_CONFIG = {
-  apiUrl: "",
+  apiUrl: "https://script.google.com/macros/s/AKfycbwSqVd7FJprTBYtY2PVMHl9eh2MduBLDtospcFuyrFBCc7HWNlcVWHhdJOYRshHE1P6sQ/exec"
 };
