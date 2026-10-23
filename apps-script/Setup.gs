@@ -15,10 +15,10 @@
 
 var CENTERS_SEED = [
   { code: 'BEDAYA', name_ar: 'مركز بداية للتدريب والتأهيل', name_en: 'Bedaya Rehabilitation and Training Center', phone: '03 751 0337',
-    whatsapp: '+971 56 950 7172', email: 'info@bedayarehab.com', address: 'العين، الإمارات العربية المتحدة', supervisor_name: 'محمد حيمور',
+    whatsapp: '+971 56 950 7172', email: 'info@bedayarehab.com', address: 'العين، الإمارات العربية المتحدة', supervisor_name: 'محمد حيمور', supervisor_name_en: 'Mohammad Haimour',
     color: '#2f7d4a', license_no: '', footer_note: '' },
   { code: 'ALPINE', name_ar: 'مركز ألباين الطبي', name_en: 'Alpine Medical Center', phone: '+971 3 785 7537',
-    whatsapp: '', email: 'infowebsite@alpine.ae', address: 'العين - المويعي - عود بن صقحان', supervisor_name: '',
+    whatsapp: '', email: 'infowebsite@alpine.ae', address: 'العين - المويعي - عود بن صقحان', supervisor_name: '', supervisor_name_en: '',
     color: '#7b2d63', license_no: '', footer_note: '' },
 ];
 
