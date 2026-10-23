@@ -149,7 +149,7 @@
     "الأخصائي المسؤول (اختياري — لكل المستوردين)": "Assigned therapist (optional — for all imported)", "— بدون —": "— none —", "— لا يوجد —": "— none —",
     "الورقة (Sheet)": "Sheet", "٣. تأكد من الأعمدة (تم اختيارها تلقائياً — غيّرها إذا لزم)": "3. Check the columns (chosen automatically — change if needed)",
     "رقم الملف *": "File no. *", "الاسم *": "Name *", "الاسم بالإنجليزي (اختياري)": "Name in English (optional)", "الجنس (اختياري)": "Gender (optional)",
-    "تحديث بيانات المرضى الموجودين مسبقاً (نفس رقم الملف في نفس المركز). بدون هذا الخيار يتم تخطيهم.": "Update existing patients (same file no. in the same center). Without this option they are skipped.",
+    "المرضى الموجودين مسبقاً: عبّي الخانات الفاضية عندهم بس من الملف (أي شي ضفته أو عدّلته بالموقع ما بيتغيّر). بدون هذا الخيار يتم تخطيهم.": "Existing patients: only fill their EMPTY fields from the file (anything you added or edited on the site is kept). Without this option they are skipped.",
     "اختر عمود «رقم الملف» وعمود «الاسم».": "Choose the “File no.” and “Name” columns.", "صف": "Row", "بالإنجليزي": "English",
     "الصيغة المتوقعة يوم/شهر/سنة. سيُستورد بدون تاريخ.": "Expected format day/month/year. It will be imported without a date.",
     "يظهر أول 300 صف فقط في المعاينة، وسيتم استيراد الكل.": "Only the first 300 rows are shown in the preview; all will be imported.",

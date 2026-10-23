@@ -1308,7 +1308,7 @@
         <label class="f">٣. تأكد من الأعمدة (تم اختيارها تلقائياً — غيّرها إذا لزم)</label>
         <div class="grid cols-3">${IMPORT_FIELDS.map(([k, t]) => `<div class="field"><label class="f">${t}</label><select class="input" data-col="${k}"><option value="-1">— لا يوجد —</option>${headers.map((h, i) => `<option value="${i}" ${g[k] === i ? "selected" : ""}>${esc(h || "عمود " + (i + 1))}</option>`).join("")}</select></div>`).join("")}</div>
         <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xauto" ${g.file_no < 0 ? "checked" : ""}> الملف ما فيه رقم ملف: أعطِ كل مريض رقم ملف مؤقت (TMP-…) وعدّله لاحقاً من ملف المريض.</label>
-        <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xu"> تحديث بيانات المرضى الموجودين مسبقاً (نفس رقم الملف في نفس المركز). بدون هذا الخيار يتم تخطيهم.</label>`;
+        <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xu"> المرضى الموجودين مسبقاً: عبّي الخانات الفاضية عندهم بس من الملف (أي شي ضفته أو عدّلته بالموقع ما بيتغيّر). بدون هذا الخيار يتم تخطيهم.</label>`;
       const xs = main.querySelector("#xs");
       if (xs) xs.value = curSheet, xs.onchange = () => { curSheet = xs.value; readSheet(curSheet); drawMap(); };
       main.querySelectorAll("[data-col]").forEach((el) => el.onchange = drawPrev);
