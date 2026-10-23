@@ -1,0 +1,10 @@
+# never commit patient data or exports
+*.xlsx
+*.csv
+*.docx
+*.pdf
+pb_data/
+backups/
+.clasp.json
+.DS_Store
+Thumbs.db
