@@ -16,6 +16,8 @@
 //         grid2 = 2 cells per row, label bold (oral-facial table)
 //    | a | b | c |          table; first row = header (shaded)
 //    [[SIG]]                the therapist's signature + stamp images (from his profile); blank if none
+//    [[SUP]]                the center's clinical supervisor signature + stamp (Settings). Added automatically
+//                           to the empty signature cell of any "المشرف السريري / Clinical supervisor" table row.
 // =====================================================================
 (function () {
   const INFO2_FILL = "F2F2F2", INFO4_FILL = "9CC2E5", HEAD_FILL = "9CC2E5";
@@ -60,6 +62,24 @@
     return blocks;
   }
 
+  // Put [[SUP]] in the empty signature cell of the clinical-supervisor row (works for old documents too).
+  const SUP_ROW = /المشرف السريري|Clinical supervisor/i;
+  function autoSup(text) {
+    if (/\[\[SUP\]\]/.test(text)) return text;
+    let sigCol = -1;
+    return String(text || "").split(/\r?\n/).map((line) => {
+      const t = line.trim();
+      if (!t.startsWith("|")) { sigCol = -1; return line; }
+      const cells = t.replace(/^\|/, "").replace(/\|$/, "").split("|");
+      if (sigCol < 0) { sigCol = cells.findIndex((c) => /التوقيع|Signature/i.test(c)); if (sigCol < 0) sigCol = -2; return line; }
+      if (sigCol >= 0 && SUP_ROW.test(cells[0] || "") && cells[sigCol] !== undefined && !cells[sigCol].trim()) {
+        cells[sigCol] = " [[SUP]] ";
+        return "|" + cells.join("|") + "|";
+      }
+      return line;
+    }).join("\n");
+  }
+
   // "**bold** rest" -> [{t, b}]
   function inline(text) {
     const parts = []; const re = /\*\*(.+?)\*\*/g; let last = 0, m;
@@ -77,7 +97,9 @@
     const { lang, center, logoUrl, docTitle } = opts;
     const rtl = lang === "ar";
     const sig = opts.sig || {};
-    const sigHtml = (sig.sign ? `<img class="sg" src="${esc(sig.sign.url)}" alt="">` : "") + (sig.stamp ? `<img class="st" src="${esc(sig.stamp.url)}" alt="">` : "");
+    const imgs = (x) => ((x && x.sign) ? `<img class="sg" src="${esc(x.sign.url)}" alt="">` : "") + ((x && x.stamp) ? `<img class="st" src="${esc(x.stamp.url)}" alt="">` : "");
+    const sigHtml = imgs(sig), supHtml = imgs(opts.sup);
+    text = autoSup(text);
     const body = parse(text).map((b) => {
       switch (b.t) {
         case "title": return `<h1>${inlineHtml(b.text)}</h1>`;
@@ -108,7 +130,8 @@
         }
       }
       return "";
-    }).join("\n").replace(/\[\[SIG\]\]/g, sigHtml ? `<span class="sigs">${sigHtml}</span>` : "");
+    }).join("\n").replace(/\[\[SIG\]\]/g, sigHtml ? `<span class="sigs">${sigHtml}</span>` : "")
+      .replace(/\[\[SUP\]\]/g, supHtml ? `<span class="sigs">${supHtml}</span>` : "");
     const names = center ? `<div class="cn">${esc(center.name_ar)}</div><div class="cn en">${esc(center.name_en || "")}</div>` : "";
     return `<!doctype html><html lang="${lang}" dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8"><title>${esc(docTitle || "")}</title>
 <style>
@@ -164,19 +187,24 @@ ${body}
     const textRuns = (txt, o = {}) => inline(txt).map((p) => new d.TextRun({ text: p.t, bold: o.bold || p.b, boldComplexScript: o.bold || p.b, underline: o.underline ? {} : undefined,
       font: { ascii: FONT, hAnsi: FONT, cs: FONT }, size: o.size || SZ, sizeComplexScript: o.size || SZ, rightToLeft: rtl, color: o.color }));
     // [[SIG]] -> signature + stamp images
-    const sig = opts.sig || {};
+    const sig = opts.sig || {}, sup = opts.sup || {};
+    text = autoSup(text);
     const img = (im, h) => new d.ImageRun({ data: im.data, type: im.type, transformation: { width: Math.round((im.w / im.h) * h), height: h } });
-    const sigRuns = (o) => {
+    const sigRuns = (o, who) => {
       const small = (o.size || SZ) < SZ, out = [];
-      if (sig.sign && sig.sign.data) out.push(img(sig.sign, small ? 36 : 44));
-      if (sig.stamp && sig.stamp.data) { if (out.length) out.push(new d.TextRun({ text: "   " })); out.push(img(sig.stamp, small ? 54 : 68)); }
+      if (who.sign && who.sign.data) out.push(img(who.sign, small ? 36 : 44));
+      if (who.stamp && who.stamp.data) { if (out.length) out.push(new d.TextRun({ text: "   " })); out.push(img(who.stamp, small ? 54 : 68)); }
       return out;
     };
     const runs = (txt, o = {}) => {
-      const parts = String(txt == null ? "" : txt).split("[[SIG]]");
+      const parts = String(txt == null ? "" : txt).split(/(\[\[(?:SIG|SUP)\]\])/);
       if (parts.length === 1) return textRuns(txt, o);
       const out = [];
-      parts.forEach((part, i) => { if (i > 0) out.push(...sigRuns(o)); if (part.trim()) out.push(...textRuns(part, o)); });
+      parts.forEach((part) => {
+        if (part === "[[SIG]]") out.push(...sigRuns(o, sig));
+        else if (part === "[[SUP]]") out.push(...sigRuns(o, sup));
+        else if (part.trim()) out.push(...textRuns(part, o));
+      });
       return out.length ? out : textRuns("", o);
     };
     const P = (txt, o = {}) => new d.Paragraph({

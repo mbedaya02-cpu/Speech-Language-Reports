@@ -1,11 +1,12 @@
 /* Speech and Language Reports — main app (vanilla JS, Arabic RTL UI) */
 (function () {
   "use strict";
-  // Backend URL: config.js, or ?api=… in the address, or saved in this browser.
+  // Backend URL: ?api=… in the address (this tab), or chosen on the connect screen (this browser), or config.js.
   const API_KEY = "sr_api_url";
   const qApi = new URLSearchParams(location.search).get("api");
-  if (qApi) { try { localStorage.setItem(API_KEY, qApi); } catch (_) {} history.replaceState(null, "", location.pathname + location.hash); }
-  let API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || (() => { try { return localStorage.getItem(API_KEY) || ""; } catch (_) { return ""; } })();
+  if (qApi) { try { sessionStorage.setItem(API_KEY, qApi); } catch (_) {} history.replaceState(null, "", location.pathname + location.hash); }
+  const stored = (st) => { try { return st.getItem(API_KEY) || ""; } catch (_) { return ""; } };
+  let API_URL = qApi || stored(sessionStorage) || stored(localStorage) || (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || "";
   const pb = new GasPB(API_URL);
   pb.autoCancellation(false);
 
@@ -16,6 +17,10 @@
   try { S.centerFilter = localStorage.getItem("centerFilter") || ""; } catch (_) {}
 
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
+  // Interface language (ar / en). Documents keep their own language toggle.
+  const UI = window.I18N ? I18N.lang : "ar";
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026</footer>`;
+  const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
   const KIND = { "تقرير التقييم الأولي": "initial", "تقرير تقييم": "evaluation", "تقرير إعادة تقييم": "evaluation", "تقرير تقييم مرحلي": "progress", "تقرير خروج": "discharge", "تقرير لجهة خارجية": "external" };
@@ -144,11 +149,11 @@
     const cur = value ?? (mode === "multi" ? [] : "");
     return `<div class="chips">${options.map((o) => {
       const on = mode === "multi" ? (cur || []).includes(o.v) : cur === o.v;
-      return `<button type="button" class="chip${on ? " on" : ""}" data-path="${esc(path)}" data-v="${esc(o.v)}" data-mode="${mode}" title="${esc(o.en || "")}">${esc(o[lang] || o.ar)}</button>`;
+      return `<button type="button" class="chip${on ? " on" : ""}" data-path="${esc(path)}" data-v="${esc(o.v)}" data-mode="${mode}" title="${esc(o.en || "")}">${esc((lang && o[lang]) || tx(o))}</button>`;
     }).join("")}</div>`;
   }
   function specQ(path, spec, value, extraLabel) {
-    return `<div class="q"><div class="q-label">${esc(spec.label.ar)}${spec.type === "multi" ? '<span class="tag">اختيار متعدد</span>' : ""}${extraLabel || ""}</div>${chipsHtml(path, spec.options, value, spec.type || "single")}</div>`;
+    return `<div class="q"><div class="q-label">${esc(tx(spec.label))}${spec.type === "multi" ? '<span class="tag">اختيار متعدد</span>' : ""}${extraLabel || ""}</div>${chipsHtml(path, spec.options, value, spec.type || "single")}</div>`;
   }
 
   // ------------------------------------------------------------------ modal
@@ -174,24 +179,33 @@
   const val = (root, name) => { const el = root.querySelector(`[name="${name}"]`); return el ? el.value.trim() : ""; };
 
   // ------------------------------------------------------------------ shell
+  // Language switch button (works on every screen: delegated click below)
+  const langBtn = () => `<button type="button" class="btn sm lang-btn" data-notr data-uilang="${UI === "en" ? "ar" : "en"}" title="${UI === "en" ? "العربية" : "English"}">${UI === "en" ? "عربي" : "English"}</button>`;
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-uilang]"); if (!b) return;
+    if (dirty && !confirm("لديك تغييرات غير محفوظة. هل تريد المغادرة دون حفظ؟")) return;
+    dirty = false; I18N.setLang(b.dataset.uilang);
+  });
+
   function shell(active, html) {
     const links = [
       ["#/", "الرئيسية", "home"],
       ["#/patients", "المرضى", "patients"],
       ["#/forms", "النماذج", "forms"],
-      ...(isAdmin() ? [["#/users", "المستخدمون", "users"], ["#/audit", "سجل الحركات", "audit"], ["#/settings", "الإعدادات", "settings"]] : []),
+      ...(isAdmin() ? [["#/docs", "آخر المستندات", "docs"], ["#/users", "المستخدمون", "users"], ["#/audit", "سجل الحركات", "audit"], ["#/settings", "الإعدادات", "settings"]] : []),
       ["#/me", "ملفي", "me"],
     ];
     const centerOpts = [`<option value="">كل المراكز</option>`, ...S.centers.map((c) => `<option value="${c.id}" ${S.centerFilter === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`)].join("");
     app.innerHTML = `
       <header class="topbar">
-        <a class="brand" href="#/"><span class="brand-mark">ن</span>${esc((S.settings && S.settings.system_name) || APP_NAME)}</a>
+        <a class="brand" href="#/"><span class="brand-mark">${UI === "en" ? "S" : "ن"}</span>${esc(UI === "en" ? APP_NAME_EN : ((S.settings && S.settings.system_name) || APP_NAME))}</a>
         <nav class="nav">${links.map(([h, t, k]) => `<a href="${h}" class="${k === active ? "active" : ""}">${t}</a>`).join("")}</nav>
         <div class="spacer"></div>
         <select class="input" id="centerFilter" style="width:auto" aria-label="المركز">${centerOpts}</select>
-        <div class="userbox"><span>${esc(S.me.name || S.me.email)} · ${ROLE[S.me.role] || ""}</span><button class="btn sm" id="logout">خروج</button></div>
+        ${langBtn()}
+        <div class="userbox"><span>${esc(UI === "en" && S.me.name_en ? S.me.name_en : (S.me.name || S.me.email))} · ${ROLE[S.me.role] || ""}</span><button class="btn sm" id="logout">خروج</button></div>
       </header>
-      <main>${html}</main>`;
+      <main>${html}</main>${CREDIT}`;
     app.querySelector("#logout").onclick = () => { if (dirty && !confirm("تغييرات غير محفوظة. الخروج؟")) return; dirty = false; pb.authStore.clear(); history.replaceState(null, "", location.pathname + "#/"); lastHash = "#/"; renderLogin(); };
     app.querySelector("#centerFilter").onchange = (e) => {
       S.centerFilter = e.target.value;
@@ -204,7 +218,7 @@
   // ------------------------------------------------------------------ login
   function renderLogin(msg) {
     app.innerHTML = `<div class="login-wrap"><div class="panel login"><div class="panel-body">
-      <div class="brand" style="margin-bottom:14px"><span class="brand-mark">ن</span><span>${APP_NAME}<div class="hint" dir="ltr" style="font-weight:500">${APP_NAME_EN}</div></span></div>
+      <div class="brand" style="margin-bottom:14px"><span class="brand-mark">${UI === "en" ? "S" : "ن"}</span><span>${UI === "en" ? APP_NAME_EN : APP_NAME}<div class="hint" style="font-weight:500">${UI === "en" ? APP_NAME : APP_NAME_EN}</div></span>${langBtn()}</div>
       <h1>تسجيل الدخول</h1><p class="muted" style="margin:4px 0 18px">ادخل بحسابك الخاص. لا تشارك كلمة المرور مع أحد.</p>
       ${msg ? `<div class="err-box">${esc(msg)}</div>` : ""}
       <form id="lf">
@@ -212,7 +226,7 @@
         <div class="field"><label class="f" for="pw">كلمة المرور</label><input class="input" id="pw" type="password" required autocomplete="current-password"></div>
         <button class="btn primary" style="width:100%" type="submit">دخول</button>
       </form>
-      <div style="margin-top:14px;text-align:center"><a href="javascript:void 0" id="chgSrv" class="hint">تغيير رابط الخادم</a></div></div></div></div>`;
+      <div style="margin-top:14px;text-align:center"><a href="javascript:void 0" id="chgSrv" class="hint">تغيير رابط الخادم</a></div></div></div>${CREDIT}</div>`;
     app.querySelector("#chgSrv").onclick = () => window.__changeServer();
     app.querySelector("#lf").onsubmit = async (e) => {
       e.preventDefault();
@@ -231,9 +245,16 @@
     const [centers, settings, therapists] = await Promise.all([
       pb.collection("centers").getFullList({ sort: "code" }),
       pb.collection("app_settings").getFirstListItem("").catch(() => null),
-      pb.collection("users").getFullList({ filter: 'role = "therapist" && active = true', sort: "name" }),
+      pb.collection("users").getFullList({ filter: '(role = "therapist" || role = "admin") && active = true', sort: "name" }),
     ]);
     S.centers = centers; S.settings = settings; S.therapists = therapists;
+    if (UI === "en") {
+      // data that has an English twin: center names, nationalities
+      const m = {};
+      centers.forEach((c) => { if (c.name_ar && c.name_en) m[c.name_ar] = c.name_en; });
+      FC.NATIONALITIES.forEach(([ar, en]) => { m[ar] = en; });
+      I18N.add(m);
+    }
     if (S.centerFilter && !centerById(S.centerFilter)) S.centerFilter = "";
     if (!location.hash || location.hash === "#") location.hash = "#/";
     route();
@@ -256,6 +277,8 @@
       if (h[0] === "report" && h[1]) return await pageDoc("reports", h[1]);
       if (h[0] === "users" && isAdmin()) return await pageUsers();
       if (h[0] === "me") return await pageMe();
+      if (h[0] === "docs" && isAdmin()) return await pageDocs();
+      if (h[0] === "import" && (isAdmin() || S.me.role === "reception")) return pageImport();
       if (h[0] === "audit" && isAdmin()) return await pageAudit();
       if (h[0] === "settings" && isAdmin()) return await pageSettings();
       shell("", `<div class="panel empty">الصفحة غير موجودة.</div>`);
@@ -311,7 +334,7 @@
     const later = all.filter((i) => i.days > remindBefore());
     const overdue = now.filter((i) => i.days < 0).length;
     main.innerHTML = `
-      <div class="page-head"><div class="grow"><h1>مرحباً ${esc((S.me.name || "").split(" ")[0])}</h1><div class="muted">${today()} · التذكير يبدأ قبل ${remindBefore()} يوم من الموعد ويستمر حتى ${remindAfter()} أيام بعده</div></div>
+      <div class="page-head"><div class="grow"><h1>مرحباً ${esc(((UI === "en" && S.me.name_en) || S.me.name || "").split(" ")[0])}</h1><div class="muted">${today()} · التذكير يبدأ قبل ${remindBefore()} يوم من الموعد ويستمر حتى ${remindAfter()} أيام بعده</div></div>
         <a class="btn" href="#/patients">قائمة المرضى</a></div>
       <div class="grid cols-4">
         <div class="panel stat danger"><div class="num">${overdue}</div><div class="lbl">متأخرة (فات موعدها)</div></div>
@@ -333,7 +356,7 @@
     const q = qs();
     const main = shell("patients", "");
     main.innerHTML = `
-      <div class="page-head"><h1 class="grow">المرضى</h1>${isAdmin() || S.me.role === "reception" ? `<button class="btn primary" id="newP">+ مريض جديد</button>` : ""}</div>
+      <div class="page-head"><h1 class="grow">المرضى</h1>${isAdmin() || S.me.role === "reception" ? `<a class="btn" href="#/import">⬆ استيراد من Excel</a>` : ""}${isAdmin() || S.me.role === "reception" || isTherapist() ? `<button class="btn primary" id="newP">+ مريض جديد</button>` : ""}</div>
       <div class="panel"><div class="panel-head" style="flex-wrap:wrap">
         <input class="input" id="q" placeholder="بحث بالاسم أو رقم الملف…" value="${esc(q.q || "")}" style="max-width:320px">
         <select class="input" id="st" style="width:auto"><option value="">كل الحالات</option>${PATIENT_STATUS.map((s) => `<option ${q.st === s ? "selected" : ""}>${s}</option>`).join("")}</select>
@@ -349,7 +372,7 @@
       main.querySelector("#count").textContent = `${res.totalItems} مريض`;
       main.querySelector("#list").innerHTML = res.items.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>رقم الملف</th><th>الاسم</th><th>العمر</th><th>التشخيص</th><th>الأخصائي</th><th>المركز</th><th>الحالة</th></tr></thead><tbody>
         ${res.items.map((p) => `<tr class="click" data-go="#/patient/${p.id}"><td class="mono">${esc(p.file_no)}</td><td><strong>${esc(p.full_name)}</strong>${p.full_name_en ? `<div class="hint">${esc(p.full_name_en)}</div>` : ""}</td>
-          <td class="nowrap">${esc(A.ageString(p.dob, today(), "ar"))}</td><td>${esc(p.diagnosis)}</td>
+          <td class="nowrap">${esc(A.ageString(p.dob, today(), UI))}</td><td>${esc(p.diagnosis)}</td>
           <td>${esc(((p.expand && p.expand.therapists) || []).map((t) => t.name).join("، "))}</td><td>${centerTag(p.center)}</td><td>${statusPill(p.status)}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">لا يوجد مرضى مطابقون.</div>`;
       main.querySelectorAll("[data-go]").forEach((tr) => tr.onclick = () => go(tr.dataset.go));
@@ -362,10 +385,13 @@
   }
 
   function patientModal(p, done) {
-    p = p || { status: "نشط", center: S.centerFilter || (S.centers[0] && S.centers[0].id), therapists: [] };
+    // A therapist adds patients only to their own centers, and is assigned to them automatically.
+    const myCenters = isTherapist() && (S.me.centers || []).length ? S.centers.filter((c) => S.me.centers.includes(c.id)) : S.centers;
+    const defCenter = myCenters.some((c) => c.id === S.centerFilter) ? S.centerFilter : (myCenters[0] && myCenters[0].id);
+    p = p || { status: "نشط", center: defCenter, therapists: [] };
     const canAssign = isAdmin() || S.me.role === "reception";
     const body = `<div class="grid cols-2">
-      <div class="field"><label class="f">المركز *</label><select class="input" name="center">${S.centers.map((c) => `<option value="${c.id}" ${p.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">المركز *</label><select class="input" name="center">${(p.id ? S.centers : myCenters).map((c) => `<option value="${c.id}" ${p.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
       <div class="field"><label class="f">رقم الملف *</label><input class="input mono" name="file_no" value="${esc(p.file_no)}"></div>
       <div class="field"><label class="f">الاسم بالعربي *</label><input class="input" name="full_name" value="${esc(p.full_name)}"></div>
       <div class="field"><label class="f">الاسم بالإنجليزي (للتقارير الإنجليزية)</label><input class="input" dir="ltr" name="full_name_en" value="${esc(p.full_name_en)}"></div>
@@ -422,7 +448,7 @@
     ]);
     const info = [
       ["رقم الملف", `<span class="mono">${esc(p.file_no)}</span>`], ["المركز", centerTag(p.center)],
-      ["تاريخ الميلاد", `${d10(p.dob) || "—"} <span class="muted">(${esc(A.ageString(p.dob, today(), "ar")) || "—"})</span>`],
+      ["تاريخ الميلاد", `${d10(p.dob) || "—"} <span class="muted">(${esc(A.ageString(p.dob, today(), UI)) || "—"})</span>`],
       ["الجنس", esc(p.gender || "—")], ["الجنسية", esc(p.nationality || "—")], ["ولي الأمر", esc(p.guardian_name || "—")], ["الهاتف", `<span class="mono">${esc(p.phone || "—")}</span>`],
       ["التأمين", esc([p.insurance_company, p.insurance_no].filter(Boolean).join(" · ") || "—")], ["التشخيص", esc(p.diagnosis || "—")],
       ["بدء العلاج", d10(p.start_date) || "—"], ["الأخصائي", esc(((p.expand && p.expand.therapists) || []).map((t) => t.name).join("، ") || "—")],
@@ -496,11 +522,16 @@
   async function exportDoc(fmt, text, lang, centerId, fileName, sigFrom) {
     const c = centerById(centerId);
     const logoUrl = c && c.logo ? pb.files.getURL(c, c.logo) : "";
-    let sig = {};
-    if (sigFrom && /\[\[SIG\]\]/.test(text)) {
-      try { const r = await pb.getSignature(sigFrom); sig = await X.loadSig({ sign: r.signature, stamp: r.stamp }); } catch (_) { sig = {}; }
-    }
-    const opts = { lang, center: c, logoUrl, sig, fileName: fileName.replace(/[\\/:*?"<>|]+/g, "-"), docTitle: fileName };
+    let sig = {}, sup = {};
+    const wantSig = sigFrom && /\[\[SIG\]\]/.test(text);
+    const wantSup = c && (c.sup_has_signature || c.sup_has_stamp) && /\[\[SUP\]\]|المشرف السريري|Clinical supervisor/i.test(text);
+    const [rs, rp] = await Promise.all([
+      wantSig ? pb.getSignature(sigFrom).catch(() => null) : null,
+      wantSup ? pb.getSignature({ center: c.id }).catch(() => null) : null,
+    ]);
+    if (rs) sig = await X.loadSig({ sign: rs.signature, stamp: rs.stamp });
+    if (rp) sup = await X.loadSig({ sign: rp.signature, stamp: rp.stamp });
+    const opts = { lang, center: c, logoUrl, sig, sup, fileName: fileName.replace(/[\\/:*?"<>|]+/g, "-"), docTitle: fileName };
     try {
       if (fmt === "docx") { await X.exportDocx(text, opts); toast("تم تنزيل ملف Word"); }
       else X.exportPdf(text, opts);
@@ -572,6 +603,8 @@
     let lang = (isPlan ? rec.plan_lang : rec.report_lang) || "ar";
     const pcAr = FC.personCtx(patient, "ar", today());
     const pcFor = (l) => FC.personCtx(patient, l, d10(isPlan ? rec.start_date : rec.report_date) || today());
+    const pcUi = UI === "en" ? pcFor("en") : pcAr;
+    const gxUi = (o) => FC.gx(tx(o), pcUi);
     const field = isPlan ? "plan_data" : "assessment";
     const data = (rec[field] && Object.keys(rec[field]).length) ? rec[field] : Object.assign(form.defaults(pcAr), rec[field] || {});
     if (isPlan) data.blocks = data.blocks || [];
@@ -592,30 +625,30 @@
     }
 
     // ----- field renderer
-    const optLabel = (f, o) => (f.chipLabel === "short" && o.short ? o.short : FC.gx(o.ar, pcAr));
+    const optLabel = (f, o) => (f.chipLabel === "short" && o.short && UI !== "en" ? o.short : gxUi(o));
     const fieldsById = {};
     function renderField(f) {
       fieldsById[f.id] = f;
       const hidden = f.show && !f.show(data) ? " hidden" : "";
-      const lab = f.label && f.label.ar ? `<div class="q-label">${esc(f.label.ar)}${f.type === "multi" ? '<span class="tag">اختيار متعدد</span>' : ""}</div>` : "";
-      const sugg = (f.suggest || []).length ? `<div class="chips sugg-row">${f.suggest.map((s, i) => `<button type="button" class="chip sugg" data-sugg="${f.id}" data-i="${i}" title="${esc(FC.gx(s.en || "", pcFor("en")))}">+ ${esc(FC.gx(s.ar, pcAr))}</button>`).join("")}</div>` : "";
+      const lab = f.label && f.label.ar ? `<div class="q-label">${esc(tx(f.label))}${f.type === "multi" ? '<span class="tag">اختيار متعدد</span>' : ""}</div>` : "";
+      const sugg = (f.suggest || []).length ? `<div class="chips sugg-row">${f.suggest.map((s, i) => `<button type="button" class="chip sugg" data-sugg="${f.id}" data-i="${i}" title="${esc(FC.gx(UI === "en" ? s.ar : (s.en || ""), UI === "en" ? pcAr : pcFor("en")))}">+ ${esc(gxUi(s))}</button>`).join("")}</div>` : "";
       const v = data[f.id];
       let inner = "";
       switch (f.type) {
         case "single": case "multi":
           inner = `<div class="chips">${f.options.map((o) => {
             const on = f.type === "multi" ? (v || []).includes(o.v) : v === o.v;
-            return `<button type="button" class="chip${on ? " on" : ""}" data-path="${f.id}" data-v="${esc(o.v)}" data-mode="${f.type}" title="${esc(FC.gx(o.ar, pcAr))}">${esc(optLabel(f, o))}</button>`;
+            return `<button type="button" class="chip${on ? " on" : ""}" data-path="${f.id}" data-v="${esc(o.v)}" data-mode="${f.type}" title="${esc(FC.gx(UI === "en" ? o.ar : (o.en || ""), UI === "en" ? pcAr : pcFor("en")))}">${esc(optLabel(f, o))}</button>`;
           }).join("")}</div>`; break;
         case "text": inner = `<input class="input" data-path="${f.id}" value="${esc(v)}" placeholder="${esc(f.placeholder || "")}" ${f.ltr ? 'dir="ltr"' : ""}>` + sugg; break;
         case "number": inner = `<input class="input" type="number" min="0" data-path="${f.id}" value="${esc(v)}" style="max-width:180px">`; break;
         case "textarea": inner = `<textarea class="input" data-path="${f.id}" rows="3">${esc(v)}</textarea>` + sugg; break;
         case "list": inner = `<textarea class="input" data-path="${f.id}" rows="4" placeholder="سطر لكل بند">${esc(v)}</textarea>` + sugg + (f.suggestFrom ? `<div class="chips sugg-row" data-dyn="${f.suggestFrom}" data-for="${f.id}"></div>` : ""); break;
         case "matrix":
-          inner = `<div class="table-wrap"><table class="t matrix"><tbody>${f.rows.map((r) => `<tr><td class="mlabel">${esc(f.rowLabel === "short" && r.short ? r.short : FC.gx(r.ar, pcAr))}</td>
+          inner = `<div class="table-wrap"><table class="t matrix"><tbody>${f.rows.map((r) => `<tr><td class="mlabel">${esc(f.rowLabel === "short" && r.short && UI !== "en" ? r.short : gxUi(r))}</td>
             ${f.groups.map((g) => `<td>${g.label ? `<div class="hint">${esc(g.label)}</div>` : ""}<div class="chips">${g.options.map((o) => {
               const cur = ((v || {})[r.v] || {})[g.key];
-              return `<button type="button" class="chip${cur === o.v ? " on" : ""}" data-path="${f.id}.${r.v}.${g.key}" data-v="${esc(o.v)}" data-mode="single">${esc(o.ar)}</button>`;
+              return `<button type="button" class="chip${cur === o.v ? " on" : ""}" data-path="${f.id}.${r.v}.${g.key}" data-v="${esc(o.v)}" data-mode="single">${esc(tx(o))}</button>`;
             }).join("")}</div></td>`).join("")}
             ${f.note ? `<td style="min-width:180px"><input class="input" placeholder="ملاحظة" data-path="${f.id}.${r.v}.note" value="${esc(((v || {})[r.v] || {}).note)}"></td>` : ""}</tr>`).join("")}</tbody></table></div>`; break;
         case "goals": inner = `<div id="goalsEditor"></div>`; break;
@@ -625,8 +658,8 @@
     }
 
     const sections = form.sections;
-    const sideHtml = sections.map((s, i) => `<a href="javascript:void 0" data-jump="${s.id}"><span>${esc(s.title.ar)}</span><span class="cnt" data-cnt="${s.id}"></span></a>`).join("") + `<a href="javascript:void 0" data-jump="doc"><span>النص النهائي والتصدير</span></a>`;
-    const formHtml = sections.map((s, i) => `<div class="panel" id="s-${s.id}"><div class="panel-head"><h2 class="section-title grow"><span class="n">${i + 1}</span>${esc(s.title.ar)}</h2>${s.title.en ? `<span class="hint" dir="ltr">${esc(s.title.en)}</span>` : ""}</div>
+    const sideHtml = sections.map((s, i) => `<a href="javascript:void 0" data-jump="${s.id}"><span>${esc(tx(s.title))}</span><span class="cnt" data-cnt="${s.id}"></span></a>`).join("") + `<a href="javascript:void 0" data-jump="doc"><span>النص النهائي والتصدير</span></a>`;
+    const formHtml = sections.map((s, i) => `<div class="panel" id="s-${s.id}"><div class="panel-head"><h2 class="section-title grow"><span class="n">${i + 1}</span>${esc(tx(s.title))}</h2>${s.title.en && UI !== "en" ? `<span class="hint" dir="ltr">${esc(s.title.en)}</span>` : ""}</div>
       <div class="panel-body">${s.fields.map(renderField).join("")}</div></div>`).join("");
 
     const title = isPlan ? (id === "new" ? (rec.previous ? "تجديد الخطة التربوية الفردية" : "خطة تربوية فردية جديدة") : "الخطة التربوية الفردية") : rec.report_type;
@@ -726,12 +759,12 @@
         const head = g.block !== last ? `<h3 style="margin:12px 0 6px">${esc(g.ltg || g.general)}</h3>` : ""; last = g.block;
         const cur = data.gs[g.key] || {};
         return `${head}<div class="goal-row"><div style="margin-bottom:6px">${esc(g.text)} ${g.eval ? `<span class="hint">(في الخطة: ${esc(evalLabel(g))})</span>` : ""}</div>
-          <div class="chips">${f.statuses.map((o) => `<button type="button" class="chip${cur.s === o.v ? " on" : ""}" data-path="gs.${g.key}.s" data-v="${o.v}" data-mode="single">${esc(o.ar)}</button>`).join("")}
+          <div class="chips">${f.statuses.map((o) => `<button type="button" class="chip${cur.s === o.v ? " on" : ""}" data-path="gs.${g.key}.s" data-v="${o.v}" data-mode="single">${esc(tx(o))}</button>`).join("")}
           ${f.pct ? `<input class="input" type="number" min="0" max="100" data-path="gs.${g.key}.pct" value="${esc(cur.pct)}" placeholder="% الإنجاز" style="width:120px">` : ""}</div></div>`;
       }).join("");
       refreshDyn();
     }
-    const evalLabel = (g) => window.Forms.plan.evalText(g, "ar");
+    const evalLabel = (g) => window.Forms.plan.evalText(g, UI);
     renderPlanGoals();
     const ps = main.querySelector("#planSel");
     if (ps) ps.onchange = () => { rec.plan = ps.value; data.gs = {}; dirty = true; renderPlanGoals(); };
@@ -748,16 +781,16 @@
           const bank = PF.STG_BANK[b.general] || [];
           return `<div class="goal-block panel" style="box-shadow:none;margin-bottom:14px"><div class="panel-head" style="flex-wrap:wrap">
               <span class="section-title"><span class="n">${bi + 1}</span></span>
-              <select class="input" data-b="${bi}" data-k="general" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}" ${b.general === o.v ? "selected" : ""}>${esc(o.ar)}</option>`).join("")}</select>
+              <select class="input" data-b="${bi}" data-k="general" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}" ${b.general === o.v ? "selected" : ""}>${esc(tx(o))}</option>`).join("")}</select>
               <span class="grow"></span><button class="btn sm" data-bmv="${bi}:-1">↑</button><button class="btn sm" data-bmv="${bi}:1">↓</button><button class="btn sm danger" data-brm="${bi}">حذف المجال</button></div>
             <div class="panel-body">
               <label class="f">الهدف طويل المدى</label>
               <textarea class="input" rows="2" data-b="${bi}" data-k="ltg" dir="${lang === "ar" ? "rtl" : "ltr"}">${esc(txt(b.ltg))}</textarea>
-              ${skills.length ? `<div class="chips sugg-row">${skills.map((s, i) => `<button type="button" class="chip sugg" data-ltg="${bi}:${i}">+ ${esc(s.ar)}</button>`).join("")}</div>` : ""}
+              ${skills.length ? `<div class="chips sugg-row">${skills.map((s, i) => `<button type="button" class="chip sugg" data-ltg="${bi}:${i}">+ ${esc(tx(s))}</button>`).join("")}</div>` : ""}
               <h3 style="margin:14px 0 8px">الأهداف قصيرة المدى</h3>
               ${(b.stgs || []).map((s, si) => {
                 const t = txt(s); const noNum = t && !/\d/.test(t);
-                const mc = (key, opts) => `<div class="chips">${opts.map((o) => `<button type="button" class="chip${(s[key] || []).includes(o.v) ? " on" : ""}" data-gchip="${bi}:${si}:${key}" data-v="${o.v}">${esc(o.ar)}</button>`).join("")}</div>`;
+                const mc = (key, opts) => `<div class="chips">${opts.map((o) => `<button type="button" class="chip${(s[key] || []).includes(o.v) ? " on" : ""}" data-gchip="${bi}:${si}:${key}" data-v="${o.v}">${esc(tx(o))}</button>`).join("")}</div>`;
                 return `<div class="goal-row">
                   <div class="top"><span class="num">${si + 1}</span><span class="grow" style="flex:1"></span>${noNum ? `<span class="pill warn" title="بند C9: كل هدف قصير المدى يحتاج معياراً رقمياً">⚠ بدون معيار رقمي</span>` : ""}
                     <button class="btn sm" data-smv="${bi}:${si}:-1">↑</button><button class="btn sm" data-smv="${bi}:${si}:1">↓</button><button class="btn sm danger" data-srm="${bi}:${si}">حذف</button></div>
@@ -767,17 +800,17 @@
                     <div><label class="f">المواد والأدوات اللازمة</label>${mc("materials", PF.MATERIALS)}</div>
                     <div><label class="f">الاستراتيجيات التدريبية</label>${mc("strategies", PF.STRATEGIES)}</div>
                     <div><label class="f">التعزيز</label>${mc("reinf", PF.REINF)}</div>
-                    <div><label class="f">التقييم</label><div class="chips">${PF.EVAL.map((o) => `<button type="button" class="chip${s.eval === o.v ? " on" : ""}" data-geval="${bi}:${si}" data-v="${o.v}">${esc(o.ar)}</button>`).join("")}
+                    <div><label class="f">التقييم</label><div class="chips">${PF.EVAL.map((o) => `<button type="button" class="chip${s.eval === o.v ? " on" : ""}" data-geval="${bi}:${si}" data-v="${o.v}">${esc(tx(o))}</button>`).join("")}
                       ${s.eval === "partial" ? `<input class="input" type="number" min="1" max="99" data-b="${bi}" data-s="${si}" data-k="pct" value="${esc(s.pct)}" placeholder="%" style="width:90px">` : ""}</div></div>
                     <div><label class="f">تاريخ البدء</label><input class="input" type="date" data-b="${bi}" data-s="${si}" data-k="start" value="${esc(s.start || d10(rec.start_date))}"></div>
                     <div><label class="f">تاريخ الانتهاء</label><input class="input" type="date" data-b="${bi}" data-s="${si}" data-k="end" value="${esc(s.end || d10(rec.end_date))}"></div>
                   </div></div>`;
               }).join("")}
               <div class="btn-row"><button class="btn" data-sadd="${bi}">+ هدف قصير فارغ</button></div>
-              ${bank.length ? `<details style="margin-top:10px" open><summary class="f" style="cursor:pointer">بنك الأهداف لهذا المجال (اضغط لإضافة — استبدل X بالرقم أو الصوت)</summary><div class="bank" style="margin-top:6px">${bank.map((g, i) => `<button type="button" data-bank="${bi}:${i}">+ ${esc(FC.gx(g.ar, pcAr))}</button>`).join("")}</div></details>` : ""}
+              ${bank.length ? `<details style="margin-top:10px" open><summary class="f" style="cursor:pointer">بنك الأهداف لهذا المجال (اضغط لإضافة — استبدل X بالرقم أو الصوت)</summary><div class="bank" style="margin-top:6px">${bank.map((g, i) => `<button type="button" data-bank="${bi}:${i}">+ ${esc(gxUi(g))}</button>`).join("")}</div></details>` : ""}
             </div></div>`;
         }).join("")
-        + `<div class="btn-row"><select class="input" id="newDomain" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}">${esc(o.ar)}</option>`).join("")}</select><button class="btn primary" id="addBlock">+ إضافة هدف عام</button></div>`;
+        + `<div class="btn-row"><select class="input" id="newDomain" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}">${esc(tx(o))}</option>`).join("")}</select><button class="btn primary" id="addBlock">+ إضافة هدف عام</button></div>`;
     }
     function goalsHandlers() {
       const box = formRoot.querySelector("#goalsEditor"); if (!box) return;
@@ -950,10 +983,17 @@
       <div class="panel"><div class="table-wrap"><table class="t"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الدور</th><th>المراكز</th><th>التوقيع / الختم</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${users.map((u) => `<tr><td><strong>${esc(u.name)}</strong>${u.name_en ? `<div class="hint" dir="ltr" style="text-align:right">${esc(u.name_en)}</div>` : ""}</td><td class="mono">${esc(u.username)}${u.email ? `<div class="hint">${esc(u.email)}</div>` : ""}</td><td>${esc(ROLE[u.role] || u.role)}</td>
         <td>${(u.centers || []).map(centerTag).join(" ")}</td><td>${u.has_signature ? '<span class="pill ok">توقيع</span>' : ""} ${u.has_stamp ? '<span class="pill ok">ختم</span>' : ""}${!u.has_signature && !u.has_stamp ? '<span class="hint">—</span>' : ""}</td><td>${u.active ? '<span class="pill ok">مفعّل</span>' : '<span class="pill danger">موقوف</span>'}</td>
-        <td><button class="btn sm" data-u="${u.id}">تعديل</button></td></tr>`).join("")}</tbody></table></div></div>
+        <td class="nowrap"><button class="btn sm" data-u="${u.id}">تعديل</button> <button class="btn sm" data-sig="${u.id}">✍ التوقيع / الختم</button></td></tr>`).join("")}</tbody></table></div></div>
       <p class="hint" style="margin-top:10px">إيقاف الحساب يمنع الدخول فوراً مع الإبقاء على سجلاته. الأخصائي يرى فقط المرضى المسندين إليه.</p>`;
     main.querySelector("#newU").onclick = () => userModal(null);
     main.querySelectorAll("[data-u]").forEach((b) => b.onclick = () => userModal(users.find((u) => u.id === b.dataset.u)));
+    main.querySelectorAll("[data-sig]").forEach((b) => b.onclick = () => {
+      const u = users.find((x) => x.id === b.dataset.sig);
+      const m = modal(`التوقيع والختم — ${u.name || u.username}`, `<div id="sigBox"></div>`, { wide: true });
+      m.querySelector("[data-x]").addEventListener("click", () => route());
+      m.addEventListener("click", (e) => { if (e.target === m) route(); });
+      sigEditor(m.querySelector("#sigBox"), u.id);
+    });
   }
   function userModal(u) {
     const isNew = !u; u = u || { role: "therapist", active: true, centers: S.centers.map((c) => c.id) };
@@ -976,7 +1016,7 @@
         if (isNew && pw.length < 8) { toast("كلمة المرور 8 أحرف على الأقل", true); return false; }
         if (pw) { data.password = pw; data.passwordConfirm = pw; }
         if (isNew) { data.verified = true; await pb.collection("users").create(data); } else await pb.collection("users").update(u.id, data);
-        S.therapists = await pb.collection("users").getFullList({ filter: 'role = "therapist" && active = true', sort: "name" });
+        S.therapists = await pb.collection("users").getFullList({ filter: '(role = "therapist" || role = "admin") && active = true', sort: "name" });
         toast("تم الحفظ"); route();
       },
     });
@@ -1018,10 +1058,12 @@
   }
 
   // Signature + stamp boxes for one user (used in «ملفي» and in the admin's user window).
-  async function sigEditor(box, userId) {
+  // target: a user id, or { center } for the center's clinical supervisor
+  async function sigEditor(box, target, onChange) {
+    const who = typeof target === "string" ? { user: target } : target, userId = who.user;
     box.innerHTML = `<div class="empty">جاري التحميل…</div>`;
     let cur;
-    try { cur = await pb.getSignature({ user: userId }); } catch (e) { box.innerHTML = `<div class="err-box">${esc(errText(e))}</div>`; return; }
+    try { cur = await pb.getSignature(who); } catch (e) { box.innerHTML = `<div class="err-box">${esc(errText(e))}</div>`; return; }
     const KINDS = [["signature", "التوقيع", "صورة واضحة للتوقيع بقلم أزرق أو أسود على ورقة بيضاء.", 600, 240], ["stamp", "الختم", "صورة الختم (مقصوصة على حدود الختم).", 420, 420]];
     const draw = () => {
       box.innerHTML = `<div class="grid cols-2">${KINDS.map(([k, t, hint]) => `<div class="goal-row" data-k="${k}">
@@ -1032,7 +1074,7 @@
           <label class="hint" style="display:block;margin-top:6px"><input type="checkbox" data-white="${k}" checked> إزالة الخلفية البيضاء</label>
           <div class="btn-row" style="margin-top:8px"><button type="button" class="btn primary sm" data-up="${k}">رفع ${t}</button>${cur[k] ? `<button type="button" class="btn danger sm" data-del="${k}">حذف</button>` : ""}</div>
         </div>`).join("")}</div>
-        <p class="hint">يظهر التوقيع والختم مكان <bdi class="mono" dir="ltr">[[SIG]]</bdi> في نص التقرير أو الخطة عند التنزيل (Word / PDF). احذف <bdi class="mono" dir="ltr">[[SIG]]</bdi> من النص إذا لم ترده في مستند معيّن.</p>`;
+        ${who.center ? `<p class="hint">يظهر تلقائياً في خانة «التوقيع» بسطر «المشرف السريري» في كل خطط هذا المركز — حتى الخطط القديمة — عند تنزيلها Word / PDF.</p>` : `<p class="hint">يظهر التوقيع والختم مكان <bdi class="mono" dir="ltr">[[SIG]]</bdi> في نص التقرير أو الخطة عند التنزيل (Word / PDF). احذف <bdi class="mono" dir="ltr">[[SIG]]</bdi> من النص إذا لم ترده في مستند معيّن.</p>`}`;
       box.querySelectorAll("[data-up]").forEach((b) => b.onclick = async () => {
         const k = b.dataset.up, spec = KINDS.find((x) => x[0] === k);
         const f = box.querySelector(`[data-file="${k}"]`).files[0];
@@ -1040,20 +1082,221 @@
         b.disabled = true;
         try {
           const dataUrl = await prepImage(f, spec[3], spec[4], box.querySelector(`[data-white="${k}"]`).checked);
-          await pb.setSignature({ user: userId, [k]: dataUrl });
-          cur[k] = dataUrl; toast(`تم رفع ${spec[1]}`); afterSig(userId); draw();
+          await pb.setSignature({ ...who, [k]: dataUrl });
+          cur[k] = dataUrl; toast(`تم رفع ${spec[1]}`); afterSig(userId); onChange && onChange(cur); draw();
         } catch (e) { toast(e.status ? errText(e) : e.message, true); b.disabled = false; }
       });
       box.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
         const k = b.dataset.del, spec = KINDS.find((x) => x[0] === k);
         if (!confirm(`حذف ${spec[1]}؟`)) return;
-        try { await pb.setSignature({ user: userId, [k]: "" }); cur[k] = ""; toast("تم الحذف"); afterSig(userId); draw(); } catch (e) { toast(errText(e), true); }
+        try { await pb.setSignature({ ...who, [k]: "" }); cur[k] = ""; toast("تم الحذف"); afterSig(userId); onChange && onChange(cur); draw(); } catch (e) { toast(errText(e), true); }
       });
     };
     draw();
   }
   function afterSig(userId) {
-    if (S.me && S.me.id === userId) pb.collection("users").authRefresh().then((r) => { S.me = r.record; }).catch(() => {});
+    if (userId && S.me && S.me.id === userId) pb.collection("users").authRefresh().then((r) => { S.me = r.record; }).catch(() => {});
+  }
+
+  // ------------------------------------------------------------------ latest documents (admin)
+  async function pageDocs() {
+    const q = qs();
+    const main = shell("docs", `<div class="empty">جاري التحميل…</div>`);
+    const cf = centerFilterExpr("patient.center");
+    const [plans, reports, users] = await Promise.all([
+      pb.collection("plans").getList(1, 400, { filter: cf, sort: "-updated", expand: "patient,therapist" }),
+      pb.collection("reports").getList(1, 400, { filter: cf, sort: "-updated", expand: "patient,therapist" }),
+      pb.collection("users").getFullList({ sort: "name" }),
+    ]);
+    const all = [
+      ...plans.items.map((r) => ({ kind: "plan", coll: "plans", r, type: r.plan_type, date: d10(r.start_date), text: r.plan_text, lang: r.plan_lang || "ar" })),
+      ...reports.items.map((r) => ({ kind: "report", coll: "reports", r, type: r.report_type, date: d10(r.report_date), text: r.report_text, lang: r.report_lang || "ar" })),
+    ].map((x) => ({ ...x, p: (x.r.expand && x.r.expand.patient) || {}, t: (x.r.expand && x.r.expand.therapist) || null }))
+      .sort((a, b) => String(b.r.updated).localeCompare(String(a.r.updated)));
+    const ther = users.filter((u) => all.some((x) => x.r.therapist === u.id));
+    const types = [...new Set(all.map((x) => x.type).filter(Boolean))];
+    const statuses = [...new Set(all.map((x) => x.r.status).filter(Boolean))];
+    const opt = (v, t, sel) => `<option value="${esc(v)}" ${sel === v ? "selected" : ""}>${esc(t)}</option>`;
+    main.innerHTML = `<div class="page-head"><div class="grow"><h1>آخر المستندات</h1><div class="muted">كل الخطط والتقارير — الأحدث تعديلاً أولاً${plans.totalItems + reports.totalItems > all.length ? ` (آخر ${all.length})` : ""}. لتغيير المركز استخدم القائمة في الأعلى.</div></div></div>
+      <div class="panel"><div class="panel-head" style="flex-wrap:wrap;gap:8px">
+        <select class="input" id="fk" style="width:auto">${opt("", "خطط وتقارير", q.k)}${opt("plan", "الخطط فقط", q.k)}${opt("report", "التقارير فقط", q.k)}</select>
+        <select class="input" id="ft" style="width:auto">${opt("", "كل المعالجين", q.t)}${ther.map((u) => opt(u.id, u.name || u.username, q.t)).join("")}</select>
+        <select class="input" id="fy" style="width:auto">${opt("", "كل الأنواع", q.y)}${types.map((t) => opt(t, t, q.y)).join("")}</select>
+        <select class="input" id="fs" style="width:auto">${opt("", "كل الحالات", q.s)}${statuses.map((t) => opt(t, t, q.s)).join("")}</select>
+        <input class="input" id="fq" placeholder="بحث بالاسم أو رقم الملف…" value="${esc(q.q || "")}" style="max-width:240px">
+        <span class="grow"></span><span class="muted" id="cnt"></span></div><div id="list"></div></div>`;
+    const draw = () => {
+      const k = main.querySelector("#fk").value, t = main.querySelector("#ft").value, y = main.querySelector("#fy").value, st = main.querySelector("#fs").value;
+      const term = main.querySelector("#fq").value.trim().toLowerCase();
+      const items = all.filter((x) => (!k || x.kind === k) && (!t || x.r.therapist === t) && (!y || x.type === y) && (!st || x.r.status === st)
+        && (!term || [x.p.full_name, x.p.full_name_en, x.p.file_no].some((v) => String(v || "").toLowerCase().includes(term))));
+      main.querySelector("#cnt").textContent = `${items.length} مستند`;
+      main.querySelector("#list").innerHTML = items.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>آخر تعديل</th><th>المستند</th><th>التاريخ</th><th>رقم الملف</th><th>المريض</th><th>المركز</th><th>المعالج</th><th>الحالة</th><th></th></tr></thead><tbody>
+        ${items.map((x) => `<tr><td class="nowrap mono hint">${esc(String(x.r.updated || "").slice(0, 16).replace("T", " "))}</td>
+          <td><span class="pill ${x.kind === "plan" ? "info" : ""}">${x.kind === "plan" ? "خطة" : "تقرير"}</span> ${esc(x.type)}</td><td class="nowrap">${esc(x.date)}</td>
+          <td class="mono">${esc(x.p.file_no)}</td><td><a href="#/patient/${x.p.id}">${esc(x.p.full_name)}</a></td><td>${centerTag(x.r.center || x.p.center)}</td>
+          <td>${esc(x.t ? x.t.name : "")}</td><td>${statusPill(x.r.status)}</td>
+          <td class="nowrap"><a class="btn sm" href="#/${x.kind}/${x.r.id}">فتح</a> <button class="btn sm" data-ex="${x.coll}:${x.r.id}:docx">Word</button><button class="btn sm" data-ex="${x.coll}:${x.r.id}:pdf">PDF</button></td></tr>`).join("")}
+        </tbody></table></div>` : `<div class="empty">لا توجد مستندات مطابقة.</div>`;
+      main.querySelectorAll("[data-ex]").forEach((b) => b.onclick = async () => {
+        const [coll, id, fmt] = b.dataset.ex.split(":");
+        const x = all.find((i) => i.r.id === id);
+        if (!x.text) { toast("لم يتم توليد نص لهذا المستند بعد.", true); return; }
+        await exportDoc(fmt, x.text, x.lang, x.r.center || x.p.center, `${x.p.file_no}_${x.type}_${x.date}`, { collection: coll, id });
+      });
+      history.replaceState(null, "", "#/docs?" + new URLSearchParams({ k, t, y, s: st, q: term }).toString()); lastHash = location.hash;
+    };
+    ["#fk", "#ft", "#fy", "#fs"].forEach((sel) => main.querySelector(sel).onchange = draw);
+    let tm; main.querySelector("#fq").oninput = () => { clearTimeout(tm); tm = setTimeout(draw, 200); };
+    draw();
+  }
+
+  // ------------------------------------------------------------------ import patients from Excel (admin / reception)
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    return new Promise((resolve, reject) => {
+      const sc = document.createElement("script"); sc.src = "xlsx.full.min.js";
+      sc.onload = () => resolve(window.XLSX); sc.onerror = () => reject(new Error("تعذر تحميل مكتبة Excel"));
+      document.head.appendChild(sc);
+    });
+  }
+  const IMPORT_FIELDS = [
+    ["file_no", "رقم الملف *", /رقم\s*الملف|file\s*(no|num|#)|mrn|^file$|ملف/i],
+    ["full_name", "الاسم *", /^(الاسم|اسم|اسم الطفل|اسم المريض|الاسم الكامل|الاسم بالعربي|name|patient\s*name|child\s*name|full\s*name)$/i],
+    ["full_name_en", "الاسم بالإنجليزي (اختياري)", /(name.*(en|english))|(english.*name)|الاسم.*(الانجليزي|الإنجليزي|انجليزي|إنجليزي)/i],
+    ["dob", "تاريخ الميلاد", /ميلاد|تاريخ\s*الولادة|dob|birth/i],
+    ["nationality", "الجنسية", /جنسية|nationality/i],
+    ["gender", "الجنس (اختياري)", /^(الجنس|الجنس\s*.*|gender|sex)$/i],
+  ];
+  const pad2 = (n) => String(n).padStart(2, "0");
+  function toIsoDate(v) {
+    if (v == null || v === "") return "";
+    if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`;
+    if (typeof v === "number" && v > 1000 && v < 80000) { const d = new Date(Math.round((v - 25569) * 86400000)); return d.toISOString().slice(0, 10); }
+    const s = String(v).trim().replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c));
+    let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/); if (m) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+    m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+    if (m) { let y = +m[3]; if (y < 100) y += y > 50 ? 1900 : 2000; return `${y}-${pad2(m[2])}-${pad2(m[1])}`; } // day/month/year (UAE)
+    return "";
+  }
+  function normNationality(v) {
+    const s = String(v || "").trim(); if (!s) return "";
+    const low = s.toLowerCase().replace(/^ال/, "");
+    const hit = FC.NATIONALITIES.find(([ar, en]) => ar === s || ar.replace(/^ال/, "") === low || en.toLowerCase() === low
+      || (low === "uae" && en === "Emirati") || (low.startsWith("emira") && en === "Emirati") || ar.replace(/^ال/, "").replace(/ة$/, "") === low.replace(/ة$/, "")
+      || (low.length > 3 && en.toLowerCase().startsWith(low.slice(0, 4))));
+    return hit ? hit[0] : s;
+  }
+  function normGender(v) {
+    const s = String(v || "").trim().toLowerCase();
+    if (/^(ذكر|m|male|boy|ولد)$/.test(s)) return "ذكر";
+    if (/^(أنثى|انثى|f|female|girl|بنت)$/.test(s)) return "أنثى";
+    return "";
+  }
+
+  function pageImport() {
+    const main = shell("patients", "");
+    const center0 = S.centerFilter || (S.centers[0] && S.centers[0].id);
+    main.innerHTML = `<div class="page-head"><div class="grow"><h1>استيراد المرضى من Excel</h1><div class="muted">يُؤخذ من الملف فقط: رقم الملف، الاسم، تاريخ الميلاد، الجنسية (والجنس إن وُجد). باقي الأعمدة تُتجاهل.</div></div><a class="btn" href="#/patients">رجوع</a></div>
+      <div class="panel"><div class="panel-body">
+        <div class="grid cols-3">
+          <div class="field"><label class="f">١. ملف Excel (xlsx / xls / csv)</label><input type="file" id="xf" accept=".xlsx,.xls,.csv"></div>
+          <div class="field"><label class="f">٢. المركز *</label><select class="input" id="xc">${S.centers.map((c) => `<option value="${c.id}" ${c.id === center0 ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
+          <div class="field"><label class="f">الأخصائي المسؤول (اختياري — لكل المستوردين)</label><select class="input" id="xt"></select></div>
+        </div>
+        <div id="xmap"></div>
+      </div></div>
+      <div id="xprev"></div>`;
+    const drawTher = () => {
+      const c = main.querySelector("#xc").value;
+      main.querySelector("#xt").innerHTML = `<option value="">— بدون —</option>` + S.therapists.filter((t) => (t.centers || []).includes(c)).map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+    };
+    drawTher();
+    let wb = null, rows = [], headers = [];
+    const readSheet = (name) => {
+      const ws = wb.Sheets[name];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+      // header row = first row with at least 2 non-empty text cells
+      let hi = aoa.findIndex((r) => r.filter((c) => String(c).trim()).length >= 2);
+      if (hi < 0) hi = 0;
+      headers = (aoa[hi] || []).map((h) => String(h).trim());
+      rows = aoa.slice(hi + 1).map((r, i) => ({ cells: r, _row: hi + i + 2 })).filter((r) => r.cells.some((c) => String(c).trim()));
+    };
+    const guess = () => {
+      const used = new Set();
+      return Object.fromEntries(IMPORT_FIELDS.map(([k, , re]) => {
+        let idx = headers.findIndex((h, i) => !used.has(i) && re.test(h));
+        if (k === "full_name" && idx < 0) idx = headers.findIndex((h, i) => !used.has(i) && /اسم|name/i.test(h) && !/(en|english|انجليزي|إنجليزي|ولي|parent|guardian|mother|father|أم|أب|therap|أخصائي|معالج)/i.test(h));
+        if (idx >= 0) used.add(idx);
+        return [k, idx];
+      }));
+    };
+    const drawMap = () => {
+      const g = guess();
+      const sheets = wb.SheetNames;
+      main.querySelector("#xmap").innerHTML = `
+        ${sheets.length > 1 ? `<div class="field"><label class="f">الورقة (Sheet)</label><select class="input" id="xs" style="width:auto">${sheets.map((n) => `<option>${esc(n)}</option>`).join("")}</select></div>` : ""}
+        <label class="f">٣. تأكد من الأعمدة (تم اختيارها تلقائياً — غيّرها إذا لزم)</label>
+        <div class="grid cols-3">${IMPORT_FIELDS.map(([k, t]) => `<div class="field"><label class="f">${t}</label><select class="input" data-col="${k}"><option value="-1">— لا يوجد —</option>${headers.map((h, i) => `<option value="${i}" ${g[k] === i ? "selected" : ""}>${esc(h || "عمود " + (i + 1))}</option>`).join("")}</select></div>`).join("")}</div>
+        <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xu"> تحديث بيانات المرضى الموجودين مسبقاً (نفس رقم الملف في نفس المركز). بدون هذا الخيار يتم تخطيهم.</label>`;
+      const xs = main.querySelector("#xs");
+      if (xs) xs.value = curSheet, xs.onchange = () => { curSheet = xs.value; readSheet(curSheet); drawMap(); };
+      main.querySelectorAll("[data-col]").forEach((el) => el.onchange = drawPrev);
+      drawPrev();
+    };
+    let curSheet = "";
+    const mapped = () => {
+      const col = Object.fromEntries([...main.querySelectorAll("[data-col]")].map((el) => [el.dataset.col, +el.value]));
+      const get = (r, k) => (col[k] >= 0 ? r.cells[col[k]] : "");
+      return { col, list: rows.map((r) => {
+        let name = String(get(r, "full_name") || "").trim(), en = String(get(r, "full_name_en") || "").trim();
+        if (name && !/[\u0600-\u06FF]/.test(name) && !en) en = name; // English-only name: keep it as the English name too
+        return { _row: r._row, file_no: String(get(r, "file_no") ?? "").trim(), full_name: name, full_name_en: en,
+          dob: toIsoDate(get(r, "dob")), dobRaw: get(r, "dob"), nationality: normNationality(get(r, "nationality")), gender: normGender(get(r, "gender")) };
+      }) };
+    };
+    const drawPrev = () => {
+      const { col, list } = mapped();
+      const box = main.querySelector("#xprev");
+      if (col.file_no < 0 || col.full_name < 0) { box.innerHTML = `<div class="panel"><div class="panel-body"><div class="err-box">اختر عمود «رقم الملف» وعمود «الاسم».</div></div></div>`; return; }
+      const bad = list.filter((x) => !x.file_no || !x.full_name);
+      const noDob = list.filter((x) => x.dobRaw !== "" && x.dobRaw != null && !x.dob);
+      const ok = list.length - bad.length;
+      box.innerHTML = `<div class="panel"><div class="panel-head"><h2 class="grow">٤. معاينة (${ok} صف صالح${bad.length ? ` · ${bad.length} ناقص` : ""})</h2>
+          <button class="btn primary" id="xgo" ${ok ? "" : "disabled"}>استيراد ${ok} مريض</button></div>
+        ${noDob.length ? `<div class="panel-body" style="padding-bottom:0"><div class="note-box">${noDob.length} تاريخ ميلاد لم يُفهم (مثال: «${esc(noDob[0].dobRaw)}»). الصيغة المتوقعة يوم/شهر/سنة. سيُستورد بدون تاريخ.</div></div>` : ""}
+        <div class="table-wrap"><table class="t"><thead><tr><th>صف</th><th>رقم الملف</th><th>الاسم</th><th>بالإنجليزي</th><th>تاريخ الميلاد</th><th>العمر</th><th>الجنسية</th><th>الجنس</th></tr></thead><tbody>
+        ${list.slice(0, 300).map((x) => `<tr class="${!x.file_no || !x.full_name ? "row-bad" : ""}"><td class="hint">${x._row}</td><td class="mono">${esc(x.file_no)}</td><td>${esc(x.full_name)}</td><td dir="ltr">${esc(x.full_name_en)}</td>
+          <td class="nowrap">${esc(x.dob)}</td><td class="nowrap">${x.dob ? esc(A.ageString(x.dob + " 00:00:00.000Z", today(), UI)) : ""}</td><td>${esc(x.nationality)}</td><td>${esc(x.gender)}</td></tr>`).join("")}
+        </tbody></table>${list.length > 300 ? `<div class="hint" style="padding:8px">… يظهر أول 300 صف فقط في المعاينة، وسيتم استيراد الكل.</div>` : ""}</div></div>`;
+      const go2 = box.querySelector("#xgo");
+      if (go2) go2.onclick = async () => {
+        const good = list.filter((x) => x.file_no && x.full_name).map(({ dobRaw, ...x }) => x);
+        go2.disabled = true;
+        const tot = { added: 0, updated: 0, skipped: 0, errors: [] };
+        try {
+          for (let i = 0; i < good.length; i += 300) {
+            go2.textContent = `جاري الاستيراد… ${Math.min(i + 300, good.length)} / ${good.length}`;
+            const r = await pb.importPatients({ center: main.querySelector("#xc").value, therapist: main.querySelector("#xt").value, update: main.querySelector("#xu").checked, rows: good.slice(i, i + 300) });
+            tot.added += r.added; tot.updated += r.updated; tot.skipped += r.skipped; tot.errors.push(...r.errors);
+          }
+          box.innerHTML = `<div class="panel"><div class="panel-body"><h2>تم الاستيراد ✅</h2>
+            <p>جديد: <strong>${tot.added}</strong> · تحديث: <strong>${tot.updated}</strong> · تم تخطيه (موجود مسبقاً): <strong>${tot.skipped}</strong>${tot.errors.length ? ` · أخطاء: <strong>${tot.errors.length}</strong>` : ""}</p>
+            ${tot.added ? `<p class="note-box">انتبه: «الجنس» مطلوب لصياغة التقارير. افتح ملف كل مريض ليس له جنس وحدّده.</p>` : ""}
+            <div class="btn-row"><a class="btn primary" href="#/patients">عرض المرضى</a></div></div></div>`;
+        } catch (e) { toast(errText(e), true); go2.disabled = false; go2.textContent = "إعادة المحاولة"; }
+      };
+    };
+    main.querySelector("#xc").onchange = drawTher;
+    main.querySelector("#xf").onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      main.querySelector("#xmap").innerHTML = `<div class="empty">جاري قراءة الملف…</div>`;
+      try {
+        await loadXlsx();
+        wb = XLSX.read(await f.arrayBuffer(), { type: "array", cellDates: false });
+        curSheet = wb.SheetNames[0]; readSheet(curSheet); drawMap();
+      } catch (err) { main.querySelector("#xmap").innerHTML = `<div class="err-box">تعذر قراءة الملف: ${esc(err.message)}</div>`; }
+    };
   }
 
   // ------------------------------------------------------------------ my profile (everyone)
@@ -1158,7 +1401,9 @@
         <div><label class="f">ملاحظة التذييل</label><input class="input" name="footer_note" value="${esc(c.footer_note)}" placeholder="مثال: سري – للاستخدام الطبي فقط"></div>
         <div><label class="f">الشعار (PNG أو JPG)</label><input type="file" name="logo" accept="image/png,image/jpeg"></div>
       </div>
-      <div class="btn-row" style="margin-top:10px"><button class="btn primary sm" data-savec="${c.id}">حفظ المركز</button></div></div>`).join("");
+      <div class="btn-row" style="margin-top:10px"><button class="btn primary sm" data-savec="${c.id}">حفظ المركز</button></div>
+      <div class="field" style="margin-top:14px"><label class="f">توقيع وختم المشرف السريري${c.supervisor_name ? ` (${esc(c.supervisor_name)})` : ""}</label><div data-supbox="${c.id}"></div></div></div>`).join("");
+    box.querySelectorAll("[data-supbox]").forEach((el) => sigEditor(el, { center: el.dataset.supbox }, async () => { S.centers = await pb.collection("centers").getFullList({ sort: "code" }); }));
     box.querySelectorAll("[data-savec]").forEach((b) => b.onclick = async () => {
       const row = box.querySelector(`[data-c="${b.dataset.savec}"]`);
       const fd = new FormData();
@@ -1175,11 +1420,11 @@
   // ------------------------------------------------------------------ server connection
   function renderConnect(msg) {
     app.innerHTML = `<div class="login-wrap"><div class="panel login"><div class="panel-body">
-      <div class="brand" style="margin-bottom:14px"><span class="brand-mark">ن</span><span>${APP_NAME}<div class="hint" dir="ltr" style="font-weight:500">${APP_NAME_EN}</div></span></div>
+      <div class="brand" style="margin-bottom:14px"><span class="brand-mark">${UI === "en" ? "S" : "ن"}</span><span>${UI === "en" ? APP_NAME_EN : APP_NAME}<div class="hint" style="font-weight:500">${UI === "en" ? APP_NAME : APP_NAME_EN}</div></span>${langBtn()}</div>
       <h1>ربط الخادم</h1><p class="muted" style="margin:4px 0 18px">الصق رابط Apps Script (Web app) الذي ينتهي بـ <span class="mono">/exec</span>. يُحفظ في هذا المتصفح.</p>
       ${msg ? `<div class="err-box">${esc(msg)}</div>` : ""}
       <form id="cf"><div class="field"><label class="f" for="api">رابط الخادم</label><input class="input mono" id="api" dir="ltr" required placeholder="https://script.google.com/macros/s/…/exec" value="${esc(API_URL)}"></div>
-      <button class="btn primary" style="width:100%" type="submit">اتصال</button></form></div></div></div>`;
+      <button class="btn primary" style="width:100%" type="submit">اتصال</button></form></div></div>${CREDIT}</div>`;
     app.querySelector("#cf").onsubmit = async (e) => {
       e.preventDefault();
       const url = app.querySelector("#api").value.trim();
@@ -1194,7 +1439,7 @@
       location.reload();
     };
   }
-  window.__changeServer = () => { try { localStorage.removeItem(API_KEY); } catch (_) {} pb.authStore.clear(); location.reload(); };
+  window.__changeServer = () => { try { localStorage.removeItem(API_KEY); sessionStorage.removeItem(API_KEY); } catch (_) {} pb.authStore.clear(); window.__forceConnect = true; renderConnect(); };
 
   // ------------------------------------------------------------------ boot
   (async function boot() {

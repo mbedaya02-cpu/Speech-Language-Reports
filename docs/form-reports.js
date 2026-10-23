@@ -45,20 +45,20 @@
     kind: "progress",
     usesPlan: true,
     sections: [
-      { id: "prev", title: L("المستوى السابق للأداء", ""), fields: [
-        { id: "prev_level", type: "textarea", label: L("وصف المستوى عند بدء الخطة (يُعبّأ تلقائياً من الخطة ويمكن تعديله)", "") },
+      { id: "prev", title: L("المستوى السابق للأداء", "Previous level of performance"), fields: [
+        { id: "prev_level", type: "textarea", label: L("وصف المستوى عند بدء الخطة (يُعبّأ تلقائياً من الخطة ويمكن تعديله)", "Level at the start of the plan (filled from the plan, editable)") },
       ] },
-      { id: "goals", title: L("الأهداف السابقة وحالتها", ""), fields: [{ id: "gs", type: "plangoals", statuses: GOAL_STATUS, pct: true }] },
-      { id: "current", title: L("المستوى الحالي للأداء", ""), fields: [
-        { id: "current_level", type: "textarea", label: L("وصف المستوى الحالي (اتركه فارغاً لتوليد ملخص تلقائي من حالة الأهداف)", "") },
-        { id: "current_goals", type: "list", label: L("الأهداف الحالية تشمل (سطر لكل هدف) — اضغط على هدف من الخطة لإضافته", ""), suggestFrom: "openGoals" },
+      { id: "goals", title: L("الأهداف السابقة وحالتها", "Previous goals and their status"), fields: [{ id: "gs", type: "plangoals", statuses: GOAL_STATUS, pct: true }] },
+      { id: "current", title: L("المستوى الحالي للأداء", "Current level of performance"), fields: [
+        { id: "current_level", type: "textarea", label: L("وصف المستوى الحالي (اتركه فارغاً لتوليد ملخص تلقائي من حالة الأهداف)", "Current level (leave empty to generate a summary from goal status)") },
+        { id: "current_goals", type: "list", label: L("الأهداف الحالية تشمل (سطر لكل هدف) — اضغط على هدف من الخطة لإضافته", "Current goals include (one per line) — click a plan goal to add it"), suggestFrom: "openGoals" },
       ] },
-      { id: "next", title: L("الأهداف المتوقعة للفترة القادمة", ""), fields: [
-        { id: "next_days", type: "single", label: L("خلال (يوماً) القادمة", ""), options: NUMS([30, 60, 90, 180]) },
-        { id: "expected", type: "list", label: L("من المتوقع تحقيق ما يلي (سطر لكل بند)", ""), suggest: EXPECTED },
+      { id: "next", title: L("الأهداف المتوقعة للفترة القادمة", "Expected goals for the next period"), fields: [
+        { id: "next_days", type: "single", label: L("خلال (يوماً) القادمة", "Within the next (days)"), options: NUMS([30, 60, 90, 180]) },
+        { id: "expected", type: "list", label: L("من المتوقع تحقيق ما يلي (سطر لكل بند)", "Expected to achieve (one per line)"), suggest: EXPECTED },
       ] },
-      { id: "recs", title: L("التوصيات", ""), fields: [
-        { id: "recs", type: "list", label: L("التوصيات (سطر لكل توصية)", ""), suggest: PROG_RECS },
+      { id: "recs", title: L("التوصيات", "Recommendations"), fields: [
+        { id: "recs", type: "list", label: L("التوصيات (سطر لكل توصية)", "Recommendations (one per line)"), suggest: PROG_RECS },
       ] },
     ],
     defaults() { return { gs: {}, next_days: "30" }; },
@@ -140,15 +140,15 @@
     kind: "discharge",
     usesPlan: true,
     sections: [
-      { id: "info", title: L("معلومات العلاج", ""), fields: [
-        { id: "total", type: "number", label: L("إجمالي الجلسات المقدمة", "") },
-        { id: "reason", type: "multi", label: L("سبب الخروج", ""), options: REASONS },
-        { id: "status", type: "single", label: L("الحالة عند الخروج", ""), options: DC_STATUS },
+      { id: "info", title: L("معلومات العلاج", "Therapy information"), fields: [
+        { id: "total", type: "number", label: L("إجمالي الجلسات المقدمة", "Total sessions provided") },
+        { id: "reason", type: "multi", label: L("سبب الخروج", "Reason for discharge"), options: REASONS },
+        { id: "status", type: "single", label: L("الحالة عند الخروج", "Status at discharge"), options: DC_STATUS },
       ] },
-      { id: "goals", title: L("حالة أهداف الخطة عند الخروج", ""), fields: [{ id: "gs", type: "plangoals", statuses: GOAL_STATUS }] },
-      { id: "summary", title: L("ملخص ونصائح", ""), fields: [
-        { id: "summary", type: "textarea", label: L("ملخص الحالة عند الخروج", "") },
-        { id: "recs", type: "list", label: L("التوصيات (سطر لكل توصية)", ""), suggest: DC_RECS },
+      { id: "goals", title: L("حالة أهداف الخطة عند الخروج", "Plan goal status at discharge"), fields: [{ id: "gs", type: "plangoals", statuses: GOAL_STATUS }] },
+      { id: "summary", title: L("ملخص ونصائح", "Summary and advice"), fields: [
+        { id: "summary", type: "textarea", label: L("ملخص الحالة عند الخروج", "Summary at discharge") },
+        { id: "recs", type: "list", label: L("التوصيات (سطر لكل توصية)", "Recommendations (one per line)"), suggest: DC_RECS },
       ] },
     ],
     defaults() { return { gs: {}, reason: [], status: "" }; },
@@ -199,12 +199,12 @@
     kind: "external",
     usesPlan: true,
     sections: [
-      { id: "main", title: L("محتوى التقرير", ""), fields: [
-        { id: "recipient", type: "single", label: L("الجهة المرسل إليها", ""), options: RECIPIENT },
-        { id: "recipient_name", type: "text", label: L("اسم الجهة بالتحديد (اختياري)", "") },
-        { id: "purpose", type: "multi", label: L("الغرض", ""), options: PURPOSE },
-        { id: "include", type: "multi", label: L("المحتوى المضمّن من الخطة", ""), options: INCLUDE },
-        { id: "body", type: "textarea", label: L("نص إضافي", "") },
+      { id: "main", title: L("محتوى التقرير", "Report content"), fields: [
+        { id: "recipient", type: "single", label: L("الجهة المرسل إليها", "Recipient"), options: RECIPIENT },
+        { id: "recipient_name", type: "text", label: L("اسم الجهة بالتحديد (اختياري)", "Recipient name (optional)") },
+        { id: "purpose", type: "multi", label: L("الغرض", "Purpose"), options: PURPOSE },
+        { id: "include", type: "multi", label: L("المحتوى المضمّن من الخطة", "Content included from the plan"), options: INCLUDE },
+        { id: "body", type: "textarea", label: L("نص إضافي", "Additional text") },
       ] },
     ],
     defaults() { return { recipient: "whom", purpose: ["enrolled"], include: ["dx", "service"] }; },
