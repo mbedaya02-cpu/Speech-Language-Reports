@@ -32,7 +32,7 @@ function doPost(e) {
 }
 
 var REQUEST_HAS_LOCK = false;
-var WRITE_ACTIONS = ['create', 'update', 'delete', 'sendReminders', 'setSignature'];
+var WRITE_ACTIONS = ['create', 'update', 'delete', 'sendReminders', 'setSignature', 'importPatients'];
 var BATCH_ACTIONS = ['list', 'one', 'refresh', 'fileData', 'signature'];
 
 function errorOut(err) {
@@ -78,6 +78,7 @@ function handle(b) {
     case 'fileData': return fileData(u, b);
     case 'signature': return getSignature(u, b);
     case 'setSignature': return setSignature(u, b);
+    case 'importPatients': return importPatients(u, b);
     case 'sendReminders':
       if (u.role !== 'admin') throw apiError(403, 'للمدير فقط.');
       return sendReminders();
@@ -163,6 +164,12 @@ function create(u, b) {
     Auth.setPassword(rec, data.password);
   }
   if (coll === 'patients' && !rec.status) rec.status = 'نشط';
+  if (coll === 'patients' && u.role === 'therapist') {
+    // A therapist who adds a patient is assigned to them (otherwise they could not see the file),
+    // and may only add patients to their own centers.
+    if ((u.centers || []).length && (u.centers || []).indexOf(rec.center) < 0) throw apiError(403, 'لا يمكنك إضافة مريض لمركز غير مسجل لك.');
+    rec.therapists = (Array.isArray(rec.therapists) ? rec.therapists : []).filter(function (t) { return t !== u.id; }).concat([u.id]);
+  }
   if (coll === 'plans' || coll === 'reports') {
     if (!rec.therapist) rec.therapist = u.id;
     if (!rec.center) { var p = Db.get('patients', rec.patient); if (p) rec.center = p.center; }
@@ -286,7 +293,11 @@ function sigRow_(userId) {
  */
 function getSignature(u, b) {
   var userId;
-  if (b.collection) {
+  if (b.center) {
+    // Clinical supervisor of a center: every signed-in user may read it (it is printed on all plans).
+    if (!Db.get('centers', b.center)) throw apiError(404, "The requested resource wasn't found.");
+    userId = 'center_' + b.center;
+  } else if (b.collection) {
     var coll = b.collection;
     if (coll !== 'plans' && coll !== 'reports') throw apiError(400, 'Unknown collection.');
     var rec = Db.get(coll, b.id);
@@ -302,9 +313,15 @@ function getSignature(u, b) {
 
 /** { action:'setSignature', user, signature?, stamp? }  ('' removes the image). Admin, or the user himself. */
 function setSignature(u, b) {
-  var userId = b.user || u.id;
-  if (userId !== u.id && u.role !== 'admin') throw apiError(403, 'ليس لديك صلاحية لهذا الإجراء.');
-  var target = Db.get('users', userId);
+  var userId, target, coll = 'users';
+  if (b.center) {
+    if (u.role !== 'admin') throw apiError(403, 'ليس لديك صلاحية لهذا الإجراء.');
+    coll = 'centers'; target = Db.get('centers', b.center); userId = 'center_' + b.center;
+  } else {
+    userId = b.user || u.id;
+    if (userId !== u.id && u.role !== 'admin') throw apiError(403, 'ليس لديك صلاحية لهذا الإجراء.');
+    target = Db.get('users', userId);
+  }
   if (!target) throw apiError(404, "The requested resource wasn't found.");
   ['signature', 'stamp'].forEach(function (k) {
     if (b[k] === undefined || b[k] === null || b[k] === '') return;
@@ -318,8 +335,55 @@ function setSignature(u, b) {
   if (b.stamp !== undefined) row.stamp = String(b.stamp || '');
   row.has_signature = !!row.signature; row.has_stamp = !!row.stamp;
   if (isNew) Db.insert('signatures', row); else Db.update('signatures', row);
-  target.has_signature = row.has_signature; target.has_stamp = row.has_stamp;
-  Db.update('users', target);
-  Rules.audit(u, 'تعديل التوقيع/الختم', 'users', target.id, Rules.label('users', target));
+  if (coll === 'centers') {
+    target.sup_has_signature = row.has_signature; target.sup_has_stamp = row.has_stamp;
+    Db.update('centers', target);
+    Rules.audit(u, 'تعديل توقيع المشرف السريري', 'centers', target.id, target.name_ar || '');
+  } else {
+    target.has_signature = row.has_signature; target.has_stamp = row.has_stamp;
+    Db.update('users', target);
+    Rules.audit(u, 'تعديل التوقيع/الختم', 'users', target.id, Rules.label('users', target));
+  }
   return { user: userId, has_signature: row.has_signature, has_stamp: row.has_stamp };
+}
+
+// ------------------------------------------------------------------ import patients (from Excel, parsed in the browser)
+/**
+ * { action:'importPatients', center, therapist?, update?, rows:[{ file_no, full_name, full_name_en?, dob?, nationality?, gender? }] }
+ * New file numbers are added; existing ones (same center + file no.) are skipped, or updated when update = true.
+ */
+function importPatients(u, b) {
+  if (u.role !== 'admin' && u.role !== 'reception') throw apiError(403, 'ليس لديك صلاحية لهذا الإجراء.');
+  var center = Db.get('centers', b.center);
+  if (!center) throw apiError(400, 'اختر المركز.');
+  var ther = b.therapist ? Db.get('users', b.therapist) : null;
+  var rows = (b.rows || []).slice(0, 500);
+  var existing = {};
+  Db.all('patients').forEach(function (p) { if (p.center === center.id) existing[String(p.file_no).trim().toLowerCase()] = p; });
+  var FIELDS = ['full_name', 'full_name_en', 'dob', 'nationality', 'gender'];
+  var added = [], updated = 0, skipped = 0, errors = [];
+  rows.forEach(function (r, i) {
+    var fileNo = String(r.file_no || '').trim(), name = String(r.full_name || '').trim();
+    if (!fileNo || !name) { errors.push({ row: r._row || i + 1, message: 'رقم الملف أو الاسم فارغ' }); return; }
+    var key = fileNo.toLowerCase();
+    var rec = { center: center.id, file_no: fileNo, full_name: name, full_name_en: String(r.full_name_en || '').trim(),
+      dob: r.dob ? String(r.dob).slice(0, 10) + ' 00:00:00.000Z' : '', nationality: String(r.nationality || '').trim(),
+      gender: r.gender === 'ذكر' || r.gender === 'أنثى' ? r.gender : '' };
+    var old = existing[key];
+    if (old) {
+      if (!b.update) { skipped++; return; }
+      var changed = false;
+      FIELDS.forEach(function (f) { if (rec[f] && rec[f] !== old[f]) { old[f] = rec[f]; changed = true; } });
+      if (ther && (old.therapists || []).indexOf(ther.id) < 0) { old.therapists = (old.therapists || []).concat([ther.id]); changed = true; }
+      if (changed) { Db.update('patients', old); updated++; } else skipped++;
+      return;
+    }
+    rec.status = 'نشط'; rec.therapists = ther ? [ther.id] : [];
+    rec.id = Db.newId(); rec.created = rec.updated = Db.now();
+    existing[key] = rec;
+    added.push(rec);
+  });
+  if (added.length) Db.insertMany('patients', added);
+  Rules.audit(u, 'استيراد من Excel', 'patients', '', center.name_ar + ': ' + added.length + ' جديد، ' + updated + ' تحديث');
+  return { added: added.length, updated: updated, skipped: skipped, errors: errors };
 }

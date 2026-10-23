@@ -4,7 +4,7 @@
  */
 
 var COLLECTIONS = ['users', 'centers', 'patients', 'plans', 'reports', 'audit_log', 'app_settings'];
-var PROTECTED_KEYS = ['id', 'created', 'updated', 'passHash', 'salt', 'expand', 'collectionName', 'collectionId', 'password', 'passwordConfirm', 'files+', 'files-', 'verified', 'emailVisibility', 'has_signature', 'has_stamp'];
+var PROTECTED_KEYS = ['id', 'created', 'updated', 'passHash', 'salt', 'expand', 'collectionName', 'collectionId', 'password', 'passwordConfirm', 'files+', 'files-', 'verified', 'emailVisibility', 'has_signature', 'has_stamp', 'sup_has_signature', 'sup_has_stamp'];
 
 var Rules = (function () {
   function isAdmin(u) { return u && u.role === 'admin'; }
@@ -26,7 +26,7 @@ var Rules = (function () {
   function canCreate(coll, data, u) {
     switch (coll) {
       case 'users': case 'centers': return isAdmin(u);
-      case 'patients': return isAdmin(u) || u.role === 'reception';
+      case 'patients': return isAdmin(u) || u.role === 'reception' || isTher(u);
       case 'plans': case 'reports': return isAdmin(u) || (isTher(u) && ownsPatient(u, data.patient));
     }
     return false;
