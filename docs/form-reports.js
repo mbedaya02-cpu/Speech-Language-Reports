@@ -4,7 +4,7 @@
 // =====================================================================
 (function () {
   const { L, O, gx, lbl, lblMany, lines, dmy, nationality, joinList, AR_ORD, EN_ORD, endOfReport } = window.FC;
-  const S = (ar, en) => ({ ar, en });
+  const S = window.FC.S;
   const NUMS = (arr) => arr.map((n) => O(String(n), String(n), String(n)));
 
   const GOAL_STATUS = [

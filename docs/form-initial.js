@@ -4,7 +4,7 @@
 (function () {
   const { L, O, gx, lines, dmy } = window.FC;
 
-  const S = (ar, en) => ({ ar, en });
+  const S = window.FC.S;
   const SUG = {
     general: [
       S("بعد إجراء مختلف أنواع التقييمات وتحليل البيانات التي تم جمعها، لوحظ أن {N} {لديه|لديها} اضطرابات من ناحية اللغة التعبيرية.", "After conducting the assessments and analyzing the data collected, {N} was observed to have difficulties in expressive language."),

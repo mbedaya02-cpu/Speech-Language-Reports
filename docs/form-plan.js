@@ -3,7 +3,7 @@
 // =====================================================================
 (function () {
   const { L, O, gx, lbl, lblMany, lines, dmy, cell, nationality, AR_ORD } = window.FC;
-  const S = (ar, en) => ({ ar, en });
+  const S = window.FC.S;
 
   const TOOLS = [
     O("observation", "الملاحظة السريرية المباشرة", "Direct clinical observation"),

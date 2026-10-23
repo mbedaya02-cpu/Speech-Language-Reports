@@ -868,7 +868,15 @@
       if (isPlan) renderGoalsEditor();
       refreshDyn();
     }
-    if (langT) langT.onclick = (e) => { const b = e.target.closest("button"); if (b && b.dataset.l !== lang) { setLang(b.dataset.l); dirty = true; toast(b.dataset.l === "en" ? "لغة المستند: English — اضغط «توليد النص»" : "لغة المستند: العربية — اضغط «توليد النص»"); } };
+    // Switching the document language rewrites the text in that language right away.
+    if (langT) langT.onclick = (e) => {
+      const b = e.target.closest("button"); if (!b || b.dataset.l === lang) return;
+      setLang(b.dataset.l); dirty = true;
+      if (!docText.value.trim() || confirm(b.dataset.l === "en" ? "كتابة النص من جديد بالإنجليزي؟ (أي تعديل يدوي على النص الحالي رح ينمسح)" : "كتابة النص من جديد بالعربي؟ (أي تعديل يدوي على النص الحالي رح ينمسح)")) {
+        docText.value = genText();
+        toast(b.dataset.l === "en" ? "لغة المستند: English — تمت كتابة النص بالإنجليزي" : "لغة المستند: العربية — تمت كتابة النص بالعربي");
+      } else toast("تم تغيير لغة المستند. اضغط «توليد النص» لما تكون جاهز.");
+    };
     setLang(lang);
 
     // ----- generation & export
@@ -876,7 +884,7 @@
     const ctxFor = (l) => {
       const c = centerById(rec.center); const p = planRec();
       return { lang: l, pc: pcFor(l), patient, therapistName: clinicianName(therapistRec(), l), reportDate: d10(isPlan ? rec.start_date : rec.report_date),
-        startDate: d10(rec.start_date), endDate: d10(rec.end_date), centerShort: shortCenter(c, l), centerFull: fullCenter(c, l), supervisor: c ? c.supervisor_name : "",
+        startDate: d10(rec.start_date), endDate: d10(rec.end_date), centerShort: shortCenter(c, l), centerFull: fullCenter(c, l), supervisor: c ? ((l === "en" && c.supervisor_name_en) || c.supervisor_name) : "",
         reeval: rec.report_type === "تقرير إعادة تقييم", planGoals: planGoals(l), planStart: p ? d10(p.start_date) : "", planEnd: p ? d10(p.end_date) : "", planData: p ? p.plan_data : null };
     };
     const genText = () => {
@@ -886,7 +894,13 @@
         if (!therapistRec().name_en) miss.push("اسم الأخصائي بالإنجليزي");
         if (miss.length) toast("للمستند الإنجليزي ينقص: " + miss.join(" و "), true);
       }
-      return form.generate(data, ctxFor(lang));
+      let out = form.generate(data, ctxFor(lang));
+      if (lang === "en") {
+        out = FC.toEnglish(out, pcAr, pcFor("en"));
+        const left = FC.arabicLines(out);
+        if (left) toast(`تنبيه: ${left} سطر بالنص لسا بالعربي (نص مكتوب يدوياً). ترجمه بنفسك قبل التنزيل.`, true);
+      }
+      return out;
     };
     const gen = main.querySelector("#gen");
     if (gen) gen.onclick = () => {
@@ -894,7 +908,17 @@
       docText.value = genText(); dirty = true; docText.scrollIntoView({ behavior: "smooth" });
     };
     docText.oninput = () => { dirty = true; };
-    const ensureText = () => { if (!docText.value.trim()) { docText.value = genText(); dirty = true; } return docText.value; };
+    const ensureText = () => {
+      if (!docText.value.trim()) { docText.value = genText(); dirty = true; }
+      else {
+        // English document but the text is still mostly Arabic (written before switching): offer to rewrite it.
+        const total = docText.value.split("\n").filter((x) => x.trim()).length || 1;
+        const arabic = FC.arabicLines(docText.value);
+        if (lang === "en" && arabic / total > 0.3 && confirm("لغة المستند إنجليزي بس النص لسا عربي. كتابة النص بالإنجليزي قبل التنزيل؟")) { docText.value = genText(); dirty = true; }
+        if (lang === "ar" && arabic / total < 0.3 && confirm("لغة المستند عربي بس النص إنجليزي. كتابة النص بالعربي قبل التنزيل؟")) { docText.value = genText(); dirty = true; }
+      }
+      return docText.value;
+    };
     const fname = () => `${patient.file_no}_${isPlan ? rec.plan_type : rec.report_type}_${d10(isPlan ? rec.start_date : rec.report_date)}`;
     if (main.querySelector("#wordBtn")) {
       // Saved document -> signature of its therapist; new/unsaved -> the therapist who is writing it.
@@ -1397,6 +1421,7 @@
         <div><label class="f">البريد</label><input class="input mono" name="email" value="${esc(c.email)}"></div>
         <div><label class="f">واتساب</label><input class="input mono" name="whatsapp" value="${esc(c.whatsapp)}"></div>
         <div><label class="f">المشرف السريري (يظهر في اعتماد الخطة)</label><input class="input" name="supervisor_name" value="${esc(c.supervisor_name)}"></div>
+        <div><label class="f">اسم المشرف السريري بالإنجليزي</label><input class="input" dir="ltr" name="supervisor_name_en" value="${esc(c.supervisor_name_en)}"></div>
         <div><label class="f">رقم الترخيص</label><input class="input mono" name="license_no" value="${esc(c.license_no)}"></div>
         <div><label class="f">ملاحظة التذييل</label><input class="input" name="footer_note" value="${esc(c.footer_note)}" placeholder="مثال: سري – للاستخدام الطبي فقط"></div>
         <div><label class="f">الشعار (PNG أو JPG)</label><input type="file" name="logo" accept="image/png,image/jpeg"></div>
@@ -1407,7 +1432,7 @@
     box.querySelectorAll("[data-savec]").forEach((b) => b.onclick = async () => {
       const row = box.querySelector(`[data-c="${b.dataset.savec}"]`);
       const fd = new FormData();
-      ["name_ar", "name_en", "color", "address", "phone", "whatsapp", "supervisor_name", "email", "license_no", "footer_note"].forEach((k) => fd.append(k, row.querySelector(`[name="${k}"]`).value));
+      ["name_ar", "name_en", "color", "address", "phone", "whatsapp", "supervisor_name", "supervisor_name_en", "email", "license_no", "footer_note"].forEach((k) => fd.append(k, row.querySelector(`[name="${k}"]`).value));
       const f = row.querySelector('[name="logo"]').files[0]; if (f) fd.append("logo", f);
       try {
         await pb.collection("centers").update(b.dataset.savec, fd);

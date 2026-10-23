@@ -11,7 +11,11 @@
 // =====================================================================
 (function () {
   const L = (ar, en) => ({ ar, en });
-  const O = (v, ar, en, extra) => Object.assign({ v, ar, en }, extra || {});
+  // Every option / suggestion pair is registered, so Arabic text that came from a suggestion
+  // (or was pre-filled from one) can be put back into English for English documents.
+  const PAIRS = [];
+  const O = (v, ar, en, extra) => { const o = Object.assign({ v, ar, en }, extra || {}); if (ar && en) PAIRS.push(o); return o; };
+  const S = (ar, en, extra) => { const o = Object.assign({ ar, en }, extra || {}); if (ar && en) PAIRS.push(o); return o; };
 
   function joinList(items, lang) {
     items = items.filter(Boolean);
@@ -97,7 +101,35 @@
     ? ["", "^^ - انتهى التقرير -", "", "**اختصاصي النطق واللغة**", ctx.therapistName || "", "[[SIG]]"]
     : ["", "^^ - End of Report -", "", "**Speech and Language Pathologist**", ctx.therapistName || "", "[[SIG]]"];
 
-  window.FC = { L, O, joinList, ageParts, ageString, NATIONALITIES, nationality, personCtx, gx, cap, lines, optOf, lbl, lblMany, isEmpty, d10, dmy, cell,
+  // English document: replace any line, table cell or sentence that is a known Arabic suggestion
+  // with its English twin. Text the therapist typed freely in Arabic stays as it is.
+  const AR_RE = /[\u0600-\u06FF]/;
+  function toEnglish(text, pcAr, pcEn) {
+    const norm = (x) => String(x).replace(/\*\*/g, "").replace(/[\s.،,:؛!؟]+$/, "").replace(/\s+/g, " ").trim();
+    const map = new Map();
+    PAIRS.forEach((p) => { const k = norm(gx(p.ar, pcAr)); if (k && !map.has(k)) map.set(k, gx(p.en, pcEn)); });
+    const dot = (orig, v) => (/[.]\s*$/.test(orig) && !/[.!?]$/.test(v) ? v + "." : v);
+    const seg = (x) => {
+      if (!AR_RE.test(x)) return x;
+      const k = norm(x);
+      if (map.has(k)) return dot(x, map.get(k));
+      const parts = x.split(/(?<=[.!؟])\s+/);
+      if (parts.length > 1) return parts.map((y) => { const kk = norm(y); return map.has(kk) ? dot(y, map.get(kk)) : y; }).join(" ");
+      return x;
+    };
+    return String(text || "").split("\n").map((line) => {
+      if (!AR_RE.test(line)) return line;
+      if (line.trim().startsWith("|")) return line.split("|").map((c) => (c.trim() ? " " + seg(c.trim()) + " " : c)).join("|");
+      const m = line.match(/^(\s*(?:#{1,4}\s+|[-•]\s+|\d+[.)]\s+|\^\^\s+)?)(.*)$/);
+      let pre = m[1], body = m[2];
+      const lm = body.match(/^((?:\*\*)?[A-Za-z][^:]{0,60}:(?:\*\*)?\s*)(.*)$/);
+      if (lm) { pre += lm[1]; body = lm[2]; }
+      return pre + seg(body);
+    }).join("\n");
+  }
+  const arabicLines = (text) => String(text || "").split("\n").filter((l) => AR_RE.test(l)).length;
+
+  window.FC = { S, toEnglish, arabicLines, L, O, joinList, ageParts, ageString, NATIONALITIES, nationality, personCtx, gx, cap, lines, optOf, lbl, lblMany, isEmpty, d10, dmy, cell,
     AR_ORD, EN_ORD, AR_COUNT, EN_COUNT, endOfReport };
   window.Forms = window.Forms || {};
 })();
