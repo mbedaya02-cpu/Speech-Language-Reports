@@ -1179,18 +1179,26 @@
   function loadXlsx() {
     if (window.XLSX) return Promise.resolve(window.XLSX);
     return new Promise((resolve, reject) => {
-      const sc = document.createElement("script"); sc.src = "xlsx.full.min.js";
-      sc.onload = () => resolve(window.XLSX); sc.onerror = () => reject(new Error("تعذر تحميل مكتبة Excel"));
-      document.head.appendChild(sc);
+      // the copy on our site first; if it is missing, the same version from the jsDelivr CDN
+      const tryLoad = (src, next) => {
+        const sc = document.createElement("script"); sc.src = src;
+        sc.onload = () => (window.XLSX ? resolve(window.XLSX) : next());
+        sc.onerror = next;
+        document.head.appendChild(sc);
+      };
+      tryLoad("xlsx.full.min.js", () => tryLoad("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js", () => reject(new Error("تعذر تحميل مكتبة Excel"))));
     });
   }
   const IMPORT_FIELDS = [
     ["file_no", "رقم الملف *", /رقم\s*الملف|file\s*(no|num|#)|mrn|^file$|ملف/i],
     ["full_name", "الاسم *", /^(الاسم|اسم|اسم الطفل|اسم المريض|الاسم الكامل|الاسم بالعربي|name|patient\s*name|child\s*name|full\s*name)$/i],
     ["full_name_en", "الاسم بالإنجليزي (اختياري)", /(name.*(en|english))|(english.*name)|الاسم.*(الانجليزي|الإنجليزي|انجليزي|إنجليزي)/i],
+    ["dob_day", "يوم الميلاد (إذا التاريخ مقسوم على 3 أعمدة)", /(ميلاد|ولادة|birth|dob).*(اليوم|يوم|day)$/i],
+    ["dob_month", "شهر الميلاد", /(ميلاد|ولادة|birth|dob).*(الشهر|شهر|month)$/i],
+    ["dob_year", "سنة الميلاد", /(ميلاد|ولادة|birth|dob).*(السنة|سنة|year)$/i],
     ["dob", "تاريخ الميلاد", /ميلاد|تاريخ\s*الولادة|dob|birth/i],
     ["nationality", "الجنسية", /جنسية|nationality/i],
-    ["gender", "الجنس (اختياري)", /^(الجنس|الجنس\s*.*|gender|sex)$/i],
+    ["gender", "الجنس (اختياري)", /^(الجنس|النوع)(\s|\(|$)|^(gender|sex)\b/i],
   ];
   const pad2 = (n) => String(n).padStart(2, "0");
   function toIsoDate(v) {
@@ -1203,12 +1211,25 @@
     if (m) { let y = +m[3]; if (y < 100) y += y > 50 ? 1900 : 2000; return `${y}-${pad2(m[2])}-${pad2(m[1])}`; } // day/month/year (UAE)
     return "";
   }
+  function fromParts(d, m, y) {
+    const n = (x) => parseInt(String(x == null ? "" : x).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c)), 10);
+    let dd = n(d), mm = n(m), yy = n(y);
+    if (!dd || !mm || !yy) return "";
+    if (yy < 100) yy += yy > 50 ? 1900 : 2000;
+    if (mm > 12 || dd > 31) return "";
+    return `${yy}-${pad2(mm)}-${pad2(dd)}`;
+  }
   function normNationality(v) {
-    const s = String(v || "").trim(); if (!s) return "";
-    const low = s.toLowerCase().replace(/^ال/, "");
-    const hit = FC.NATIONALITIES.find(([ar, en]) => ar === s || ar.replace(/^ال/, "") === low || en.toLowerCase() === low
-      || (low === "uae" && en === "Emirati") || (low.startsWith("emira") && en === "Emirati") || ar.replace(/^ال/, "").replace(/ة$/, "") === low.replace(/ة$/, "")
-      || (low.length > 3 && en.toLowerCase().startsWith(low.slice(0, 4))));
+    const s = String(v || "").replace(/\s+/g, " ").trim(); if (!s) return "";
+    // compare a simple base form: no "ال", plain alef, no final ة/ه, masculine = feminine
+    const base = (x) => String(x).trim().toLowerCase().replace(/^ال/, "").replace(/[أإآ]/g, "ا").replace(/[ةه]$/, "").replace(/ى$/, "ي");
+    const ALIAS = { "فلسطين": "الفلسطينية", "جزر القمر": "الجزر القمرية", "كاميرون": "الكاميرونية", "الكاميرون": "الكاميرونية", "الامارات": "الإماراتية", "مصر": "المصرية", "سوريا": "السورية", "الاردن": "الأردنية", "الهند": "الهندية", "باكستان": "الباكستانية", "السودان": "السودانية", "اليمن": "اليمنية", "لبنان": "اللبنانية", "العراق": "العراقية", "السعودية": "السعودية", "عمان": "العمانية" };
+    const al = ALIAS[s.replace(/[أإآ]/g, "ا")] || ALIAS[s];
+    if (al) return al;
+    const b = base(s), low = s.toLowerCase();
+    const hit = FC.NATIONALITIES.find(([ar, en]) => base(ar) === b || en.toLowerCase() === low
+      || (low === "uae" && en === "Emirati") || (low.startsWith("emira") && en === "Emirati")
+      || (low.length > 3 && /^[a-z]/.test(low) && en.toLowerCase().startsWith(low.slice(0, 4))));
     return hit ? hit[0] : s;
   }
   function normGender(v) {
@@ -1243,15 +1264,33 @@
       // header row = first row with at least 2 non-empty text cells
       let hi = aoa.findIndex((r) => r.filter((c) => String(c).trim()).length >= 2);
       if (hi < 0) hi = 0;
-      headers = (aoa[hi] || []).map((h) => String(h).trim());
-      rows = aoa.slice(hi + 1).map((r, i) => ({ cells: r, _row: hi + i + 2 })).filter((r) => r.cells.some((c) => String(c).trim()));
+      headers = (aoa[hi] || []).map((h) => String(h).replace(/\s+/g, " ").trim());
+      // Two-row header (e.g. «تاريخ الميلاد» over «اليوم | الشهر | السنة»): join them and skip the second row.
+      const SUB = /^(اليوم|الشهر|السنة|يوم|شهر|سنة|day|month|year)$/i;
+      const sub = aoa[hi + 1] || [];
+      let start = hi + 1;
+      if (sub.some((c) => SUB.test(String(c).trim()))) {
+        let parent = "";
+        const width = Math.max(headers.length, sub.length);
+        const joined = [];
+        for (let j = 0; j < width; j++) {
+          const h = headers[j] || "", su = String(sub[j] == null ? "" : sub[j]).replace(/\s+/g, " ").trim();
+          if (h) parent = h;
+          joined.push(su ? `${h || parent} ${su}`.trim() : h);
+        }
+        headers = joined; start = hi + 2;
+      }
+      rows = aoa.slice(start).map((r, i) => ({ cells: r, _row: start + i + 1 })).filter((r) => r.cells.some((c) => String(c).trim()));
     };
     const guess = () => {
-      const used = new Set();
+      const used = new Set(), found = {};
+      const dayMonthYear = () => found.dob_day >= 0 && found.dob_month >= 0 && found.dob_year >= 0;
       return Object.fromEntries(IMPORT_FIELDS.map(([k, , re]) => {
         let idx = headers.findIndex((h, i) => !used.has(i) && re.test(h));
         if (k === "full_name" && idx < 0) idx = headers.findIndex((h, i) => !used.has(i) && /اسم|name/i.test(h) && !/(en|english|انجليزي|إنجليزي|ولي|parent|guardian|mother|father|أم|أب|therap|أخصائي|معالج)/i.test(h));
+        if (k === "dob" && dayMonthYear()) idx = -1;
         if (idx >= 0) used.add(idx);
+        found[k] = idx;
         return [k, idx];
       }));
     };
@@ -1262,10 +1301,12 @@
         ${sheets.length > 1 ? `<div class="field"><label class="f">الورقة (Sheet)</label><select class="input" id="xs" style="width:auto">${sheets.map((n) => `<option>${esc(n)}</option>`).join("")}</select></div>` : ""}
         <label class="f">٣. تأكد من الأعمدة (تم اختيارها تلقائياً — غيّرها إذا لزم)</label>
         <div class="grid cols-3">${IMPORT_FIELDS.map(([k, t]) => `<div class="field"><label class="f">${t}</label><select class="input" data-col="${k}"><option value="-1">— لا يوجد —</option>${headers.map((h, i) => `<option value="${i}" ${g[k] === i ? "selected" : ""}>${esc(h || "عمود " + (i + 1))}</option>`).join("")}</select></div>`).join("")}</div>
+        <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xauto" ${g.file_no < 0 ? "checked" : ""}> الملف ما فيه رقم ملف: أعطِ كل مريض رقم ملف مؤقت (TMP-…) وعدّله لاحقاً من ملف المريض.</label>
         <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xu"> تحديث بيانات المرضى الموجودين مسبقاً (نفس رقم الملف في نفس المركز). بدون هذا الخيار يتم تخطيهم.</label>`;
       const xs = main.querySelector("#xs");
       if (xs) xs.value = curSheet, xs.onchange = () => { curSheet = xs.value; readSheet(curSheet); drawMap(); };
       main.querySelectorAll("[data-col]").forEach((el) => el.onchange = drawPrev);
+      main.querySelector("#xauto").onchange = drawPrev;
       drawPrev();
     };
     let curSheet = "";
@@ -1275,14 +1316,16 @@
       return { col, list: rows.map((r) => {
         let name = String(get(r, "full_name") || "").trim(), en = String(get(r, "full_name_en") || "").trim();
         if (name && !/[\u0600-\u06FF]/.test(name) && !en) en = name; // English-only name: keep it as the English name too
-        return { _row: r._row, file_no: String(get(r, "file_no") ?? "").trim(), full_name: name, full_name_en: en,
-          dob: toIsoDate(get(r, "dob")), dobRaw: get(r, "dob"), nationality: normNationality(get(r, "nationality")), gender: normGender(get(r, "gender")) };
+        const auto = col.file_no < 0 && main.querySelector("#xauto") && main.querySelector("#xauto").checked;
+        return { _row: r._row, file_no: auto ? `TMP-${pad2(r._row).padStart(4, "0")}` : String(get(r, "file_no") ?? "").trim(), full_name: name, full_name_en: en,
+          dob: toIsoDate(get(r, "dob")) || fromParts(get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")), dobRaw: get(r, "dob") || [get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")].filter((x) => String(x).trim()).join("/"), nationality: normNationality(get(r, "nationality")), gender: normGender(get(r, "gender")) };
       }) };
     };
     const drawPrev = () => {
       const { col, list } = mapped();
       const box = main.querySelector("#xprev");
-      if (col.file_no < 0 || col.full_name < 0) { box.innerHTML = `<div class="panel"><div class="panel-body"><div class="err-box">اختر عمود «رقم الملف» وعمود «الاسم».</div></div></div>`; return; }
+      const autoOn = main.querySelector("#xauto") && main.querySelector("#xauto").checked;
+      if (col.full_name < 0 || (col.file_no < 0 && !autoOn)) { box.innerHTML = `<div class="panel"><div class="panel-body"><div class="err-box">اختر عمود «الاسم»، وعمود «رقم الملف» أو علّم «رقم ملف مؤقت».</div></div></div>`; return; }
       const bad = list.filter((x) => !x.file_no || !x.full_name);
       const noDob = list.filter((x) => x.dobRaw !== "" && x.dobRaw != null && !x.dob);
       const ok = list.length - bad.length;

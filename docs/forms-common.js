@@ -55,6 +55,7 @@
     ["المصرية", "Egyptian"], ["السودانية", "Sudanese"], ["الليبية", "Libyan"], ["التونسية", "Tunisian"], ["الجزائرية", "Algerian"], ["المغربية", "Moroccan"],
     ["الصومالية", "Somali"], ["الموريتانية", "Mauritanian"], ["الهندية", "Indian"], ["الباكستانية", "Pakistani"], ["البنغلاديشية", "Bangladeshi"],
     ["الفلبينية", "Filipino"], ["الإيرانية", "Iranian"], ["التركية", "Turkish"], ["البريطانية", "British"], ["الأمريكية", "American"], ["الكندية", "Canadian"],
+    ["الإيطالية", "Italian"], ["الفرنسية", "French"], ["الألمانية", "German"], ["الأفغانية", "Afghan"], ["السريلانكية", "Sri Lankan"], ["الإريترية", "Eritrean"], ["الإثيوبية", "Ethiopian"], ["الجزر القمرية", "Comorian"], ["الكاميرونية", "Cameroonian"],
   ];
   const nationality = (ar, lang) => {
     if (!ar || lang === "ar") return ar || "";
