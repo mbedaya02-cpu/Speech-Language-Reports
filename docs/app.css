@@ -211,3 +211,8 @@ details > summary.panel-head::after { content: "▾"; color: var(--muted); }
 /* credit line */
 .credit { text-align: center; font-size: 12px; letter-spacing: .06em; color: var(--muted); padding: 0 16px 22px; }
 .login-wrap .credit { padding: 0; }
+
+/* plan goals: general goal header with several long-term goals under it */
+.domain-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0 10px; padding: 10px 12px; background: var(--brand-soft); border-radius: 10px; }
+.ltg-block { margin-inline-start: 18px; border-inline-start: 3px solid var(--brand-soft); }
+.ltg-bank summary { margin: 6px 0; }

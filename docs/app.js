@@ -776,17 +776,24 @@
       const pc = pcFor(lang);
       const txt = (o) => (o ? (o[lang] || o[lang === "ar" ? "en" : "ar"] || "") : "");
       box.innerHTML = (data.blocks.length ? "" : `<div class="note-box" style="margin-bottom:10px">ابدأ بإضافة هدف عام (مجال)، ثم اختر الهدف طويل المدى، ثم أضف الأهداف قصيرة المدى من البنك أو اكتبها.</div>`)
-        + data.blocks.map((b, bi) => {
+        + (() => { let dom = 0, n = 0; return data.blocks.map((b, bi) => {
+          // Several long-term goals can sit under one general goal (consecutive blocks with the same domain).
+          const first = bi === 0 || data.blocks[bi - 1].general !== b.general;
+          const last = bi === data.blocks.length - 1 || data.blocks[bi + 1].general !== b.general;
+          if (first) { dom++; n = 0; } n++;
           const skills = PF.LTG_SKILLS[b.general] || [];
           const bank = PF.STG_BANK[b.general] || [];
-          return `<div class="goal-block panel" style="box-shadow:none;margin-bottom:14px"><div class="panel-head" style="flex-wrap:wrap">
-              <span class="section-title"><span class="n">${bi + 1}</span></span>
-              <select class="input" data-b="${bi}" data-k="general" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}" ${b.general === o.v ? "selected" : ""}>${esc(tx(o))}</option>`).join("")}</select>
-              <span class="grow"></span><button class="btn sm" data-bmv="${bi}:-1">↑</button><button class="btn sm" data-bmv="${bi}:1">↓</button><button class="btn sm danger" data-brm="${bi}">حذف المجال</button></div>
+          const used = new Set(data.blocks.filter((x) => x.general === b.general).map((x) => ((x.ltg || {}).ar || "").trim()));
+          return `${first ? `<div class="domain-head"><span class="section-title"><span class="n">${dom}</span></span><strong>الهدف العام:</strong>
+              <select class="input" data-b="${bi}" data-k="general" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}" ${b.general === o.v ? "selected" : ""}>${esc(tx(o))}</option>`).join("")}</select></div>` : ""}
+            <div class="goal-block panel ltg-block" style="box-shadow:none;margin-bottom:14px"><div class="panel-head" style="flex-wrap:wrap">
+              <span class="pill info">الهدف طويل المدى ${dom}.${n}</span>
+              <span class="grow"></span><button class="btn sm" data-bmv="${bi}:-1" title="تحريك لفوق">↑</button><button class="btn sm" data-bmv="${bi}:1" title="تحريك لتحت">↓</button><button class="btn sm danger" data-brm="${bi}">حذف هذا الهدف</button></div>
             <div class="panel-body">
               <label class="f">الهدف طويل المدى</label>
               <textarea class="input" rows="2" data-b="${bi}" data-k="ltg" dir="${lang === "ar" ? "rtl" : "ltr"}">${esc(txt(b.ltg))}</textarea>
-              ${skills.length ? `<div class="chips sugg-row">${skills.map((s, i) => `<button type="button" class="chip sugg" data-ltg="${bi}:${i}">+ ${esc(tx(s))}</button>`).join("")}</div>` : ""}
+              ${skills.length ? `<details class="ltg-bank" ${!txt(b.ltg).trim() || last ? "open" : ""}><summary class="hint" style="cursor:pointer">اقتراحات أهداف طويلة المدى لهذا المجال (${skills.length}) — إذا الخانة معبّاية، الاقتراح بينضاف كهدف طويل جديد تحت نفس الهدف العام</summary>
+                <div class="chips sugg-row">${skills.map((s, i) => { const done = used.has(PF.ltgText(s, "ar", pcFor("ar")).trim()); return `<button type="button" class="chip sugg${done ? " on" : ""}" data-ltg="${bi}:${i}" ${done ? 'title="مستخدم"' : ""}>${done ? "" : "+ "}${esc(tx(s))}</button>`; }).join("")}</div></details>` : ""}
               <h3 style="margin:14px 0 8px">الأهداف قصيرة المدى</h3>
               ${(b.stgs || []).map((s, si) => {
                 const t = txt(s); const noNum = t && !/\d/.test(t);
@@ -808,8 +815,9 @@
               }).join("")}
               <div class="btn-row"><button class="btn" data-sadd="${bi}">+ هدف قصير فارغ</button></div>
               ${bank.length ? `<details style="margin-top:10px" open><summary class="f" style="cursor:pointer">بنك الأهداف لهذا المجال (اضغط لإضافة — استبدل X بالرقم أو الصوت)</summary><div class="bank" style="margin-top:6px">${bank.map((g, i) => `<button type="button" data-bank="${bi}:${i}">+ ${esc(gxUi(g))}</button>`).join("")}</div></details>` : ""}
-            </div></div>`;
-        }).join("")
+            </div></div>
+            ${last ? `<div class="btn-row" style="margin:-4px 0 18px"><button class="btn" data-ltgadd="${bi}">+ هدف طويل المدى آخر تحت نفس الهدف العام</button></div>` : ""}`;
+        }).join(""); })()
         + `<div class="btn-row"><select class="input" id="newDomain" style="width:auto">${PF.DOMAINS.map((o) => `<option value="${o.v}">${esc(tx(o))}</option>`).join("")}</select><button class="btn primary" id="addBlock">+ إضافة هدف عام</button></div>`;
     }
     function goalsHandlers() {
@@ -824,16 +832,30 @@
       });
       box.addEventListener("change", (e) => {
         const el = e.target.closest("select[data-b]"); if (!el) return;
-        data.blocks[+el.dataset.b].general = el.value; dirty = true; renderGoalsEditor();
+        // the general-goal select sits on the first block of a run: change the whole run
+        const bi = +el.dataset.b, old = data.blocks[bi].general;
+        for (let k = bi; k < data.blocks.length && data.blocks[k].general === old; k++) data.blocks[k].general = el.value;
+        dirty = true; renderGoalsEditor();
       });
       box.addEventListener("click", (e) => {
         const t = e.target.closest("button"); if (!t) return;
         const pc = pcFor(lang), pcA = pcFor("ar"), pcE = pcFor("en");
         const ds = t.dataset;
         if (t.id === "addBlock") { data.blocks.push({ general: box.querySelector("#newDomain").value, ltg: {}, stgs: [] }); }
-        else if (ds.brm != null) { if (!confirm("حذف هذا المجال بكل أهدافه؟")) return; data.blocks.splice(+ds.brm, 1); }
+        else if (ds.brm != null) { if (!confirm("حذف هذا الهدف طويل المدى مع أهدافه القصيرة؟")) return; data.blocks.splice(+ds.brm, 1); }
+        else if (ds.ltgadd != null) { const bi = +ds.ltgadd; data.blocks.splice(bi + 1, 0, { general: data.blocks[bi].general, ltg: {}, stgs: [] }); }
         else if (ds.bmv) { const [i, dd] = get(ds.bmv); const j = i + dd; if (j < 0 || j >= data.blocks.length) return; [data.blocks[i], data.blocks[j]] = [data.blocks[j], data.blocks[i]]; }
-        else if (ds.ltg) { const [bi, i] = get(ds.ltg); const sk = PF.LTG_SKILLS[data.blocks[bi].general][i]; data.blocks[bi].ltg = { ar: PF.ltgText(sk, "ar", pcA), en: PF.ltgText(sk, "en", pcE) }; }
+        else if (ds.ltg) {
+          const [bi, i] = get(ds.ltg); const b = data.blocks[bi]; const sk = PF.LTG_SKILLS[b.general][i];
+          const ltg = { ar: PF.ltgText(sk, "ar", pcA), en: PF.ltgText(sk, "en", pcE) };
+          if (!((b.ltg || {})[lang] || "").trim()) b.ltg = ltg;
+          else {
+            // this one is filled: add the suggestion as a NEW long-term goal at the end of the same general goal
+            let end = bi; while (end + 1 < data.blocks.length && data.blocks[end + 1].general === b.general) end++;
+            data.blocks.splice(end + 1, 0, { general: b.general, ltg, stgs: [] });
+            toast("انضاف هدف طويل المدى جديد تحت نفس الهدف العام");
+          }
+        }
         else if (ds.sadd != null) { const b = data.blocks[+ds.sadd]; b.stgs = b.stgs || []; b.stgs.push({ ar: "", en: "", materials: [], strategies: ["verbal", "repetition"], reinf: ["tangible", "social"], eval: "not_started" }); }
         else if (ds.bank) { const [bi, i] = get(ds.bank); const g = PF.STG_BANK[data.blocks[bi].general][i]; const b = data.blocks[bi]; b.stgs = b.stgs || [];
           b.stgs.push({ ar: FC.gx(g.ar, pcA), en: FC.gx(g.en, pcE), materials: ["toys"], strategies: ["verbal", "physical", "repetition"], reinf: ["tangible", "social"], eval: "not_started" }); toast("تمت إضافة الهدف — عدّل X إن وجد"); }

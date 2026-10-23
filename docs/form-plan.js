@@ -86,17 +86,51 @@
   ];
   // Long-term goal skills per domain -> "تحسين مهارة {skill} ليصل {C} إلى مستوى الكفاية المطلوبة"
   const LTG_SKILLS = {
-    prelinguistic: [S("الانتباه المشترك", "joint attention"), S("التقليد الحركي والصوتي", "motor and vocal imitation"), S("تبادل الأدوار", "turn-taking"), S("الاستجابة للاسم", "responding to name")],
-    receptive: [S("الاستجابة للأوامر", "following directions"), S("الإجابة على الأسئلة البسيطة", "answering simple questions"), S("فهم المفاهيم اللغوية الأساسية", "understanding basic language concepts"), S("التعرف على المفردات", "vocabulary identification")],
-    expressive: [S("الطلب", "requesting"), S("تسمية العناصر", "naming items"), S("استخدام الجمل", "sentence use"), S("الوصف والسرد", "description and narration"), S("استخدام الضمائر والقواعد", "pronoun and grammar use")],
-    articulation: [S("إنتاج الأصوات المتأثرة", "producing the affected sounds"), S("وضوح الكلام", "speech intelligibility")],
-    pragmatics: [S("المبادرة بالتواصل", "initiating communication"), S("المحادثة", "conversation"), S("استخدام التحية والآداب الاجتماعية", "greetings and social conventions")],
-    fluency: [S("الكلام بطلاقة", "fluent speech"), S("استخدام تقنيات الطلاقة", "using fluency techniques")],
-    voice: [S("استخدام الصوت بشكل صحي", "healthy voice use")],
-    oral_motor: [S("التحكم بحركات الشفاه واللسان والفك", "lip, tongue, and jaw control")],
-    feeding: [S("المضغ", "chewing"), S("تقبّل قوامات جديدة", "accepting new textures"), S("الشرب من الكوب", "cup drinking")],
-    aac: [S("استخدام وسيلة التواصل البديل", "using the AAC system")],
+    prelinguistic: [S("الانتباه المشترك", "joint attention"), S("التقليد الحركي والصوتي", "motor and vocal imitation"), S("تبادل الأدوار", "turn-taking"), S("الاستجابة للاسم", "responding to name"),
+      S("التواصل البصري", "eye contact"), S("الانتباه والتركيز على النشاط", "attention to task"), S("اللعب الوظيفي والرمزي", "functional and symbolic play"),
+      S("الإشارة للتعبير عن الرغبة", "pointing to request"), S("استخدام الإيماءات للتواصل", "using gestures to communicate"), S("الاستماع والتمييز السمعي", "listening and auditory discrimination"),
+      S("الجلوس والانتظار أثناء النشاط", "sitting and waiting during activities"), S("التقليد باستخدام الأدوات", "imitation with objects")],
+    receptive: [S("الاستجابة للأوامر", "following directions"), S("الإجابة على الأسئلة البسيطة", "answering simple questions"), S("فهم المفاهيم اللغوية الأساسية", "understanding basic language concepts"), S("التعرف على المفردات", "vocabulary identification"),
+      S("اتباع الأوامر متعددة الخطوات", "following multi-step directions"), S("فهم الأفعال", "understanding verbs"), S("فهم الصفات", "understanding adjectives"),
+      S("فهم حروف الجر والمفاهيم المكانية", "understanding prepositions and spatial concepts"), S("فهم الضمائر", "understanding pronouns"),
+      S("فهم أسئلة من وماذا وأين ومتى ولماذا", "understanding WH questions"), S("تصنيف الأشياء حسب الفئة", "categorizing items"),
+      S("فهم المفاهيم الكمية والعددية", "understanding quantity and number concepts"), S("فهم الألوان والأشكال", "understanding colors and shapes"),
+      S("فهم القصص وتسلسل الأحداث", "understanding stories and sequences"), S("فهم الجمل الطويلة والمركبة", "understanding long and complex sentences")],
+    expressive: [S("الطلب", "requesting"), S("تسمية العناصر", "naming items"), S("استخدام الجمل", "sentence use"), S("الوصف والسرد", "description and narration"), S("استخدام الضمائر والقواعد", "pronoun and grammar use"),
+      S("المخزون اللفظي التعبيري", "expressive vocabulary"), S("تسمية الأفعال", "naming actions"), S("استخدام الصفات", "using adjectives"),
+      S("الإجابة على أسئلة من وماذا وأين", "answering WH questions"), S("طرح الأسئلة", "asking questions"), S("التعبير عن المشاعر والاحتياجات", "expressing feelings and needs"),
+      S("زيادة طول الجملة", "increasing sentence length"), S("استخدام المفرد والجمع", "using singular and plural forms"), S("استخدام حروف الجر", "using prepositions"),
+      S("استخدام أزمنة الفعل", "using verb tenses"), S("سرد الأحداث اليومية", "recounting daily events"), S("إعادة سرد القصة", "retelling stories"),
+      S("التعبير بالقبول والرفض", "expressing yes and no")],
+    articulation: [S("إنتاج الأصوات المتأثرة", "producing the affected sounds"), S("وضوح الكلام", "speech intelligibility"),
+      S("التمييز السمعي بين الأصوات", "auditory discrimination of speech sounds"), S("إنتاج الصوت المستهدف منفرداً", "producing the target sound in isolation"),
+      S("إنتاج الصوت المستهدف في المقاطع", "producing the target sound in syllables"), S("إنتاج الصوت المستهدف في الكلمات", "producing the target sound in words"),
+      S("إنتاج الصوت المستهدف في الجمل", "producing the target sound in sentences"), S("تعميم النطق الصحيح في الكلام التلقائي", "generalizing correct production to spontaneous speech"),
+      S("تقليل العمليات الفونولوجية", "reducing phonological processes"), S("إنتاج الكلمات متعددة المقاطع", "producing multisyllabic words"), S("إنتاج العناقيد الصوتية", "producing consonant clusters")],
+    pragmatics: [S("المبادرة بالتواصل", "initiating communication"), S("المحادثة", "conversation"), S("استخدام التحية والآداب الاجتماعية", "greetings and social conventions"),
+      S("التواصل البصري أثناء الحديث", "eye contact during conversation"), S("تبادل الأدوار في الحديث", "conversational turn-taking"), S("المحافظة على موضوع الحديث", "topic maintenance"),
+      S("طلب المساعدة", "requesting help"), S("اللعب التفاعلي مع الأقران", "interactive play with peers"), S("فهم تعابير الوجه والمشاعر", "understanding facial expressions and emotions"),
+      S("التعبير عن الرأي والاختيار", "expressing opinions and choices"), S("إصلاح سوء الفهم أثناء الحديث", "repairing communication breakdowns"),
+      S("اتباع القواعد الاجتماعية في المواقف المختلفة", "following social rules in different situations")],
+    fluency: [S("الكلام بطلاقة", "fluent speech"), S("استخدام تقنيات الطلاقة", "using fluency techniques"),
+      S("التحكم بمعدل الكلام", "controlling speech rate"), S("البداية السهلة للكلام", "easy onset"), S("التنفس الصحيح أثناء الكلام", "breathing during speech"),
+      S("تقليل السلوكيات الثانوية المصاحبة", "reducing secondary behaviors"), S("تقليل القلق المرتبط بالكلام", "reducing speech-related anxiety"),
+      S("الطلاقة في المواقف اليومية", "fluency in daily situations"), S("تحديد لحظات التأتأة", "identifying moments of stuttering")],
+    voice: [S("استخدام الصوت بشكل صحي", "healthy voice use"), S("التحكم بشدة الصوت", "loudness control"), S("التحكم بطبقة الصوت", "pitch control"),
+      S("دعم التنفس لإنتاج الصوت", "breath support for voice"), S("تقليل الإساءة الصوتية", "reducing vocal abuse"), S("جودة الصوت", "voice quality"), S("الرنين الصوتي", "resonance")],
+    oral_motor: [S("التحكم بحركات الشفاه واللسان والفك", "lip, tongue, and jaw control"), S("قوة عضلات الفم", "oral muscle strength"), S("إغلاق الشفاه", "lip closure"),
+      S("حركة اللسان وتحديد موقعه", "tongue movement and placement"), S("التحكم باللعاب", "saliva control"), S("ثبات الفك", "jaw stability"),
+      S("النفخ والمص", "blowing and sucking"), S("التآزر الحركي الفموي للكلام", "oral-motor coordination for speech")],
+    feeding: [S("المضغ", "chewing"), S("تقبّل قوامات جديدة", "accepting new textures"), S("الشرب من الكوب", "cup drinking"),
+      S("البلع الآمن", "safe swallowing"), S("التحكم بالطعام داخل الفم", "oral control of food"), S("تناول القوامات الصلبة", "eating solid textures"),
+      S("الأكل الذاتي باستخدام الأدوات", "self-feeding with utensils"), S("تقبّل أنواع جديدة من الطعام", "accepting new foods"),
+      S("تقليل الحساسية الفموية", "reducing oral sensitivity"), S("الشرب بالمصاصة", "straw drinking"), S("الجلوس الصحيح أثناء الوجبات", "correct seating during meals")],
+    aac: [S("استخدام وسيلة التواصل البديل", "using the AAC system"), S("الطلب باستخدام الصور", "requesting with pictures"),
+      S("التنقل في لوحة أو جهاز التواصل", "navigating the communication board or device"), S("التعليق والتعبير باستخدام الوسيلة", "commenting with AAC"),
+      S("الإجابة على الأسئلة باستخدام الوسيلة", "answering questions with AAC"), S("بناء جمل باستخدام الوسيلة", "building sentences with AAC"),
+      S("التحية والتفاعل الاجتماعي باستخدام الوسيلة", "greetings and social interaction with AAC")],
   };
+
   const CRIT_AR = "بعدد 4 مرات صحيحة من أصل 5 محاولات", CRIT_EN = "in 4 out of 5 trials";
   // Short-term goal bank (X = number / sound to fill in)
   const STG_BANK = {
@@ -275,12 +309,15 @@
       listSec(ar ? "مبررات الخطة التربوية الفردية الشاملة:" : "Rationale for the individualized plan:", d.justification);
 
       // Goals
-      let lastGeneral = null;
-      (d.blocks || []).forEach((b) => {
+      let lastGeneral = null, ltgNo = 0;
+      const blocks = d.blocks || [];
+      blocks.forEach((b, bi) => {
         const gen = b.general_text || lbl(DOMAINS, b.general, lang, pc);
-        if (gen && gen !== lastGeneral) { out.push("", `## ${ar ? "الهدف العام للخطة" : "General goal"}: ${gen}`); lastGeneral = gen; }
+        if (gen && gen !== lastGeneral) { out.push("", `## ${ar ? "الهدف العام للخطة" : "General goal"}: ${gen}`); lastGeneral = gen; ltgNo = 0; }
+        // several long-term goals under one general goal are numbered (1), (2)…
+        const many = blocks.filter((x) => x.general === b.general).length > 1;
         const ltg = G((b.ltg && (b.ltg[lang] || b.ltg[ar ? "en" : "ar"])) || "");
-        if (ltg) out.push(`**${ar ? "الهدف طويل المدى" : "Long-term goal"}: ${ltg}**`);
+        if (ltg) { ltgNo++; out.push((many ? "" : "") + `**${ar ? "الهدف طويل المدى" : "Long-term goal"}${many ? ` (${ltgNo})` : ""}: ${ltg}**`); }
         const stgs = (b.stgs || []).filter((s) => (s[lang] || s.ar || s.en || "").trim());
         if (!stgs.length) return;
         out.push(ar ? "| الاهداف قصيرة المدى | المواد والأدوات اللازمة | الاستراتيجيات التدريبية | تاريخ البدء | تاريخ الانتهاء | التعزيز | التقييم |"
@@ -329,7 +366,12 @@
       }));
       return res;
     },
-    ltgText(skill, lang, pc) { return gx(lang === "ar" ? `تحسين مهارة ${skill.ar} {ليصل|لتصل} {C} إلى مستوى الكفاية المطلوبة` : `Improve ${skill.en} skills to reach the required level of competence`, pc); },
+    ltgText(skill, lang, pc) {
+      // skills that already start with an action ("تقليل…", "زيادة…", "دعم…") are not prefixed with "تحسين مهارة"
+      const action = /^(تقليل|زيادة|دعم|تحسين|بناء)/.test(skill.ar);
+      if (lang === "ar") return gx(`${action ? skill.ar : `تحسين مهارة ${skill.ar}`} {ليصل|لتصل} {C} إلى مستوى الكفاية المطلوبة`, pc);
+      return gx(action ? `${skill.en.charAt(0).toUpperCase() + skill.en.slice(1)} to reach the required level of competence` : `Improve ${skill.en} skills to reach the required level of competence`, pc);
+    },
   };
   window.Forms.plan = form;
 })();
