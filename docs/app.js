@@ -1199,6 +1199,12 @@
     ["dob", "تاريخ الميلاد", /ميلاد|تاريخ\s*الولادة|dob|birth/i],
     ["nationality", "الجنسية", /جنسية|nationality/i],
     ["gender", "الجنس (اختياري)", /^(الجنس|النوع)(\s|\(|$)|^(gender|sex)\b/i],
+    ["phone", "رقم الهاتف", /هاتف|جوال|موبايل|الموبايل|phone|mobile|tel\b|contact/i],
+    ["guardian_name", "اسم ولي الأمر", /^(?!.*(هاتف|جوال|موبايل|رقم|phone|mobile|tel)).*(ولي\s*الأمر|ولي\s*الامر|اسم\s*(الأب|الاب|الأم|الام)|guardian|parent|father|mother)/i],
+    ["insurance_no", "رقم بطاقة التأمين", /(رقم|no\.?|number|card|id).*(بطاقة|التأمين|التامين|insurance|member)|(بطاقة|insurance)\s*(card|no|number|رقم)|member\s*(id|no)|رقم\s*البطاقة/i],
+    ["insurance_company", "شركة التأمين", /^(?!.*(رقم|no\b|number|card|id\b)).*(شركة|التأمين|التامين|insurance|insurer|payer)/i],
+    ["diagnosis", "التشخيص", /تشخيص|diagnos|dx\b/i],
+    ["start_date", "تاريخ بدء العلاج", /(بدء|بداية)\s*(العلاج|الخدمة|الجلسات)|تاريخ\s*(الالتحاق|التسجيل|القبول|الدخول)|start\s*date|admission|enrol/i],
   ];
   const pad2 = (n) => String(n).padStart(2, "0");
   function toIsoDate(v) {
@@ -1242,7 +1248,7 @@
   function pageImport() {
     const main = shell("patients", "");
     const center0 = S.centerFilter || (S.centers[0] && S.centers[0].id);
-    main.innerHTML = `<div class="page-head"><div class="grow"><h1>استيراد المرضى من Excel</h1><div class="muted">يُؤخذ من الملف فقط: رقم الملف، الاسم، تاريخ الميلاد، الجنسية (والجنس إن وُجد). باقي الأعمدة تُتجاهل.</div></div><a class="btn" href="#/patients">رجوع</a></div>
+    main.innerHTML = `<div class="page-head"><div class="grow"><h1>استيراد المرضى من Excel</h1><div class="muted">يُؤخذ من الملف كل ما يطابق خانات ملف المريض: رقم الملف، الاسم، الميلاد، الجنس، الجنسية، ولي الأمر، الهاتف، التأمين، التشخيص، تاريخ البدء. باقي الأعمدة (مثل رقم الهوية) تُتجاهل.</div></div><a class="btn" href="#/patients">رجوع</a></div>
       <div class="panel"><div class="panel-body">
         <div class="grid cols-3">
           <div class="field"><label class="f">١. ملف Excel (xlsx / xls / csv)</label><input type="file" id="xf" accept=".xlsx,.xls,.csv"></div>
@@ -1318,7 +1324,10 @@
         if (name && !/[\u0600-\u06FF]/.test(name) && !en) en = name; // English-only name: keep it as the English name too
         const auto = col.file_no < 0 && main.querySelector("#xauto") && main.querySelector("#xauto").checked;
         return { _row: r._row, file_no: auto ? `TMP-${pad2(r._row).padStart(4, "0")}` : String(get(r, "file_no") ?? "").trim(), full_name: name, full_name_en: en,
-          dob: toIsoDate(get(r, "dob")) || fromParts(get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")), dobRaw: get(r, "dob") || [get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")].filter((x) => String(x).trim()).join("/"), nationality: normNationality(get(r, "nationality")), gender: normGender(get(r, "gender")) };
+          dob: toIsoDate(get(r, "dob")) || fromParts(get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")), dobRaw: get(r, "dob") || [get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")].filter((x) => String(x).trim()).join("/"), nationality: normNationality(get(r, "nationality")), gender: normGender(get(r, "gender")),
+          guardian_name: String(get(r, "guardian_name") ?? "").trim(), phone: String(get(r, "phone") ?? "").trim(),
+          insurance_company: String(get(r, "insurance_company") ?? "").trim(), insurance_no: String(get(r, "insurance_no") ?? "").trim(),
+          diagnosis: String(get(r, "diagnosis") ?? "").trim(), start_date: toIsoDate(get(r, "start_date")) };
       }) };
     };
     const drawPrev = () => {
@@ -1332,9 +1341,9 @@
       box.innerHTML = `<div class="panel"><div class="panel-head"><h2 class="grow">٤. معاينة (${ok} صف صالح${bad.length ? ` · ${bad.length} ناقص` : ""})</h2>
           <button class="btn primary" id="xgo" ${ok ? "" : "disabled"}>استيراد ${ok} مريض</button></div>
         ${noDob.length ? `<div class="panel-body" style="padding-bottom:0"><div class="note-box">${noDob.length} تاريخ ميلاد لم يُفهم (مثال: «${esc(noDob[0].dobRaw)}»). الصيغة المتوقعة يوم/شهر/سنة. سيُستورد بدون تاريخ.</div></div>` : ""}
-        <div class="table-wrap"><table class="t"><thead><tr><th>صف</th><th>رقم الملف</th><th>الاسم</th><th>بالإنجليزي</th><th>تاريخ الميلاد</th><th>العمر</th><th>الجنسية</th><th>الجنس</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="t"><thead><tr><th>صف</th><th>رقم الملف</th><th>الاسم</th><th>بالإنجليزي</th><th>تاريخ الميلاد</th><th>العمر</th><th>الجنسية</th><th>الجنس</th><th>ولي الأمر</th><th>الهاتف</th><th>التأمين</th><th>التشخيص</th></tr></thead><tbody>
         ${list.slice(0, 300).map((x) => `<tr class="${!x.file_no || !x.full_name ? "row-bad" : ""}"><td class="hint">${x._row}</td><td class="mono">${esc(x.file_no)}</td><td>${esc(x.full_name)}</td><td dir="ltr">${esc(x.full_name_en)}</td>
-          <td class="nowrap">${esc(x.dob)}</td><td class="nowrap">${x.dob ? esc(A.ageString(x.dob + " 00:00:00.000Z", today(), UI)) : ""}</td><td>${esc(x.nationality)}</td><td>${esc(x.gender)}</td></tr>`).join("")}
+          <td class="nowrap">${esc(x.dob)}</td><td class="nowrap">${x.dob ? esc(A.ageString(x.dob + " 00:00:00.000Z", today(), UI)) : ""}</td><td>${esc(x.nationality)}</td><td>${esc(x.gender)}</td><td>${esc(x.guardian_name)}</td><td class="mono">${esc(x.phone)}</td><td>${esc([x.insurance_company, x.insurance_no].filter(Boolean).join(" · "))}</td><td>${esc(x.diagnosis)}</td></tr>`).join("")}
         </tbody></table>${list.length > 300 ? `<div class="hint" style="padding:8px">… يظهر أول 300 صف فقط في المعاينة، وسيتم استيراد الكل.</div>` : ""}</div></div>`;
       const go2 = box.querySelector("#xgo");
       if (go2) go2.onclick = async () => {

@@ -144,7 +144,7 @@
     "لا توجد مستندات مطابقة.": "No matching documents.", "لم يتم توليد نص لهذا المستند بعد.": "No text has been generated for this document yet.",
     // import
     "تعذر تحميل مكتبة Excel": "Couldn't load the Excel library", "استيراد المرضى من Excel": "Import patients from Excel",
-    "يُؤخذ من الملف فقط: رقم الملف، الاسم، تاريخ الميلاد، الجنسية (والجنس إن وُجد). باقي الأعمدة تُتجاهل.": "Only these are taken from the file: file no., name, date of birth, nationality (and gender if present). Other columns are ignored.",
+    "يُؤخذ من الملف كل ما يطابق خانات ملف المريض: رقم الملف، الاسم، الميلاد، الجنس، الجنسية، ولي الأمر، الهاتف، التأمين، التشخيص، تاريخ البدء. باقي الأعمدة (مثل رقم الهوية) تُتجاهل.": "Everything that matches a patient-file field is taken: file no., name, birth date, gender, nationality, guardian, phone, insurance, diagnosis, start date. Other columns (such as ID numbers) are ignored.",
     "١. ملف Excel (xlsx / xls / csv)": "1. Excel file (xlsx / xls / csv)", "٢. المركز *": "2. Center *",
     "الأخصائي المسؤول (اختياري — لكل المستوردين)": "Assigned therapist (optional — for all imported)", "— بدون —": "— none —", "— لا يوجد —": "— none —",
     "الورقة (Sheet)": "Sheet", "٣. تأكد من الأعمدة (تم اختيارها تلقائياً — غيّرها إذا لزم)": "3. Check the columns (chosen automatically — change if needed)",
