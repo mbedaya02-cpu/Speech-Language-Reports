@@ -173,7 +173,7 @@
     "الاسم بالإنجليزي": "Name in English", "لون الترويسة": "Letterhead color", "العنوان": "Address", "البريد": "Email", "واتساب": "WhatsApp",
     "المشرف السريري (يظهر في اعتماد الخطة)": "Clinical supervisor (shown in plan approval)", "رقم الترخيص": "License no.", "ملاحظة التذييل": "Footer note",
     "مثال: سري – للاستخدام الطبي فقط": "e.g. Confidential – medical use only", "الشعار (PNG أو JPG)": "Logo (PNG or JPG)", "حفظ المركز": "Save center",
-    "تم حفظ المركز": "Center saved", "الهدف العام:": "General goal:", "حذف هذا الهدف": "Delete this goal",
+    "تم حفظ المركز": "Center saved", "تم تغيير الحالة": "Status changed", "الهدف العام:": "General goal:", "حذف هذا الهدف": "Delete this goal",
     "+ هدف طويل المدى آخر تحت نفس الهدف العام": "+ Another long-term goal under the same general goal",
     "حذف هذا الهدف طويل المدى مع أهدافه القصيرة؟": "Delete this long-term goal with its short-term goals?",
     "انضاف هدف طويل المدى جديد تحت نفس الهدف العام": "A new long-term goal was added under the same general goal", "يوم الميلاد (إذا التاريخ مقسوم على 3 أعمدة)": "Birth day (if the date is split in 3 columns)", "شهر الميلاد": "Birth month", "سنة الميلاد": "Birth year",

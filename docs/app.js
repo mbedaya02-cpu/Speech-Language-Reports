@@ -373,9 +373,21 @@
       main.querySelector("#list").innerHTML = res.items.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>رقم الملف</th><th>الاسم</th><th>العمر</th><th>التشخيص</th><th>الأخصائي</th><th>المركز</th><th>الحالة</th></tr></thead><tbody>
         ${res.items.map((p) => `<tr class="click" data-go="#/patient/${p.id}"><td class="mono">${esc(p.file_no)}</td><td><strong>${esc(p.full_name)}</strong>${p.full_name_en ? `<div class="hint">${esc(p.full_name_en)}</div>` : ""}</td>
           <td class="nowrap">${esc(A.ageString(p.dob, today(), UI))}</td><td>${esc(p.diagnosis)}</td>
-          <td>${esc(((p.expand && p.expand.therapists) || []).map((t) => t.name).join("، "))}</td><td>${centerTag(p.center)}</td><td>${statusPill(p.status)}</td></tr>`).join("")}
+          <td>${esc(((p.expand && p.expand.therapists) || []).map((t) => t.name).join("، "))}</td><td>${centerTag(p.center)}</td><td>${isAdmin()
+            ? `<select class="input status-sel" data-pst="${p.id}" style="width:auto;padding:4px 8px">${PATIENT_STATUS.map((st) => `<option value="${st}" ${p.status === st ? "selected" : ""}>${st}</option>`).join("")}</select>`
+            : statusPill(p.status)}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">لا يوجد مرضى مطابقون.</div>`;
-      main.querySelectorAll("[data-go]").forEach((tr) => tr.onclick = () => go(tr.dataset.go));
+      main.querySelectorAll("[data-go]").forEach((tr) => tr.onclick = (e) => { if (e.target.closest(".status-sel")) return; go(tr.dataset.go); });
+      // admin: change a child's status right from the list
+      main.querySelectorAll("[data-pst]").forEach((sel) => {
+        sel.onclick = (e) => e.stopPropagation();
+        sel.onchange = async () => {
+          sel.disabled = true;
+          try { await pb.collection("patients").update(sel.dataset.pst, { status: sel.value }); toast("تم تغيير الحالة"); }
+          catch (err) { toast(errText(err), true); }
+          sel.disabled = false;
+        };
+      });
     };
     let timer;
     main.querySelector("#q").oninput = () => { clearTimeout(timer); timer = setTimeout(load, 250); };
@@ -619,6 +631,8 @@
     }
     const planRec = () => plans.find((p) => p.id === rec.plan);
     const planGoals = (l) => { const p = planRec(); return p && p.plan_data ? window.Forms.plan.allGoals(p.plan_data, l, pcFor(l)) : []; };
+    // plan: parent / guardian name comes from the patient file when it is empty
+    if (isPlan && !(data.guardian || "").trim() && patient.guardian_name) data.guardian = patient.guardian_name;
     if (kind === "progress" && id === "new" && !data.prev_level) {
       const pd = (planRec() || {}).plan_data || {};
       data.prev_level = [pd.r_receptive, pd.r_expressive, pd.r_articulation].filter(Boolean).map((t) => FC.gx(t, pcAr)).join(" ");

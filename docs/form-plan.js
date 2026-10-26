@@ -352,7 +352,7 @@
       out.push("", ar ? "**اعتماد وموافقة الخطة الفردية**" : "**Plan approval and consent**");
       out.push(ar ? "| الصفة / الاسم | التوقيع | التاريخ |" : "| Role / Name | Signature | Date |");
       out.push(ar ? `| الأخصائي المعالج: ${ctx.therapistName || ""} | [[SIG]] | ${today} |` : `| Treating therapist: ${ctx.therapistName || ""} | [[SIG]] | ${today} |`);
-      out.push(ar ? `| ولي الأمر / الوصي (الاسم وصلة القرابة): ${d.guardian || "……………"} |  | ${today} |` : `| Parent / guardian (name and relationship): ${d.guardian || "……………"} |  | ${today} |`);
+      out.push(ar ? `| ولي الأمر / الوصي (الاسم وصلة القرابة): ${d.guardian || ctx.patient.guardian_name || "……………"} |  | ${today} |` : `| Parent / guardian (name and relationship): ${d.guardian || ctx.patient.guardian_name || "……………"} |  | ${today} |`);
       out.push(ar ? `| المشرف السريري: ${ctx.supervisor || ""} |  | ${today} |` : `| Clinical supervisor: ${ctx.supervisor || ""} |  | ${today} |`);
       return out.join("\n");
     },
