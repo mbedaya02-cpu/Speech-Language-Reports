@@ -10,6 +10,8 @@
 
   const R4 = [O("shown", "ظهرت", "Shown"), O("emerging", "بدأت تظهر", "Emerging"), O("not", "لم تظهر", "Not shown"), O("na", "لم تُقيَّم", "Not rated")];
   const NA = O("na", "لم تُقيَّم", "Not rated");
+  // Articulation and speech: typical / atypical (+ a note box that opens for atypical) / not rated
+  const OK3 = [O("ok", "سليم", "Typical"), O("bad", "غير سليم", "Atypical"), O("na", "لم تُقيَّم", "Not rated")];
 
   // ---- skills (written as nouns, so they read the same for boys and girls)
   const SK = {
@@ -115,11 +117,14 @@
     { id: "pre", title: L("مهارات ما قبل اللغة", "Pre-linguistic skills"), singles: [] },
     { id: "receptive", title: L("اللغة الاستقبالية (الفهم)", "Receptive language (understanding)"), singles: [] },
     { id: "expressive", title: L("اللغة التعبيرية", "Expressive language"), singles: ["mode", "vocab"] },
-    { id: "speech", title: L("النطق والكلام", "Articulation and speech"), singles: ["intell", "drool"] },
+    { id: "speech", title: L("النطق والكلام", "Articulation and speech"), singles: ["intell", "drool"], okBad: true },
   ];
 
-  const matrixField = (p) => ({ id: p.id, type: "matrix", tone: true, label: L("قيّم كل مهارة (لم تُقيَّم = لا تظهر في التقرير)", "Rate each skill (not rated = left out of the report)"),
-    rows: SK[p.id], groups: [{ key: "s", options: R4 }] });
+  const matrixField = (p) => p.okBad
+    ? { id: p.id, type: "matrix", tone: true, label: L("قيّم كل جانب: سليم أو غير سليم، ولو غير سليم اكتب ملاحظتك (لم تُقيَّم = لا يظهر في التقرير)", "Rate each area: typical or atypical; for atypical, write your note (not rated = left out of the report)"),
+        rows: SK[p.id], groups: [{ key: "s", options: OK3 }], noteWhen: "bad", notePlaceholder: L("اكتب ما لاحظته…", "Describe what you observed…") }
+    : { id: p.id, type: "matrix", tone: true, label: L("قيّم كل مهارة (لم تُقيَّم = لا تظهر في التقرير)", "Rate each skill (not rated = left out of the report)"),
+        rows: SK[p.id], groups: [{ key: "s", options: R4 }] };
   const singleField = (k) => ({ id: k, type: "single", label: Q[k].label, options: Q[k].options });
   const noteField = (p) => ({ id: p.id + "_note", type: "textarea", label: L("ملاحظة الأخصائي لهذا القسم (اختياري — تظهر كما هي)", "Therapist note for this section (optional, shown as written)") });
 
@@ -174,15 +179,25 @@
       PARTS.forEach((p) => {
         const m = d[p.id] || {};
         const by = (s) => SK[p.id].filter((r) => (m[r.v] || {}).s === s).map(T);
-        const shown = by("shown"), emerging = by("emerging"), not = by("not");
+        let shown = by("shown"), emerging = by("emerging"), not = by("not"), follow = [];
+        if (p.okBad) {
+          // typical areas -> green list; atypical areas -> "we will follow" list with the therapist's note
+          shown = shown.concat(by("ok"));
+          follow = SK[p.id].filter((r) => ["bad", "emerging", "not"].includes((m[r.v] || {}).s)).map((r) => {
+            const nt = G(String((m[r.v] || {}).note || "").trim().replace(/[.،]\s*$/, ""));
+            return T(r) + (nt ? (ar ? ": " : ": ") + nt : "");
+          });
+          emerging = []; not = [];
+        }
         const sent = p.singles.map((k) => { const o = Q[k].options.find((x) => x.v === d[k]); return o && o.s ? T(o.s) : ""; }).filter(Boolean);
         const note = String(d[p.id + "_note"] || "").trim();
-        if (!shown.length && !emerging.length && !not.length && !sent.length && !note) return;
+        if (!shown.length && !emerging.length && !not.length && !follow.length && !sent.length && !note) return;
         n++;
         out.push("", `## ${n}. ${p.title[lang]}`);
         if (sent.length) out.push(sent.join(" "));
         const list = (tone, head, items) => { if (items.length) out.push(`### {${tone}} ${head}`, ...items.map((x) => "- " + x)); };
-        list("g", ar ? "مهارات لاحظناها بوضوح:" : "Skills we clearly observed:", shown);
+        list("g", p.okBad ? (ar ? "جوانب بدت سليمة:" : "Areas that appeared typical:") : (ar ? "مهارات لاحظناها بوضوح:" : "Skills we clearly observed:"), shown);
+        list("b", ar ? "جوانب نحتاج لمتابعتها في الجلسات القادمة:" : "Areas we will follow in the coming sessions:", follow);
         list("a", ar ? "مهارات بدأت بالظهور ونعمل على تعزيزها:" : "Skills that are starting to appear, which we will build on:", emerging);
         list("b", ar ? "مهارات لم تظهر خلال هذه الجلسة، وسنتابع ملاحظتها لاحقاً:" : "Skills we did not see in this session, which we will keep observing:", not);
         if (not.length) anyNot = true;

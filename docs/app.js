@@ -670,7 +670,8 @@
               const cur = ((v || {})[r.v] || {})[g.key];
               return `<button type="button" class="chip${cur === o.v ? " on" : ""}" data-path="${f.id}.${r.v}.${g.key}" data-v="${esc(o.v)}" data-mode="single">${esc(tx(o))}</button>`;
             }).join("")}</div></td>`).join("")}
-            ${f.note ? `<td style="min-width:180px"><input class="input" placeholder="ملاحظة" data-path="${f.id}.${r.v}.note" value="${esc(((v || {})[r.v] || {}).note)}"></td>` : ""}</tr>`).join("")}</tbody></table></div>`; break;
+            ${f.note ? `<td style="min-width:180px"><input class="input" placeholder="ملاحظة" data-path="${f.id}.${r.v}.note" value="${esc(((v || {})[r.v] || {}).note)}"></td>` : ""}
+            ${f.noteWhen ? `<td style="min-width:200px"><input class="input mnote${((v || {})[r.v] || {}).s === f.noteWhen ? "" : " hidden"}" data-mnote="${f.id}.${r.v}" placeholder="${esc(tx(f.notePlaceholder) || "ملاحظة")}" data-path="${f.id}.${r.v}.note" value="${esc(((v || {})[r.v] || {}).note)}"></td>` : ""}</tr>`).join("")}</tbody></table></div>`; break;
         case "goals": inner = `<div id="goalsEditor"></div>`; break;
         case "plangoals": inner = `<div id="planGoals"></div>`; break;
       }
@@ -737,6 +738,12 @@
 
     function refreshShow() {
       Object.values(fieldsById).forEach((f) => { if (!f.show) return; const el = formRoot.querySelector(`[data-fid="${f.id}"]`); if (el) el.classList.toggle("hidden", !f.show(data)); });
+      // matrix rows with a note box that opens only for one answer (e.g. "غير سليم")
+      Object.values(fieldsById).forEach((f) => { if (!f.noteWhen) return; f.rows.forEach((r) => {
+        const el = formRoot.querySelector(`[data-mnote="${f.id}.${r.v}"]`); if (!el) return;
+        const open = ((data[f.id] || {})[r.v] || {}).s === f.noteWhen, was = !el.classList.contains("hidden");
+        el.classList.toggle("hidden", !open); if (open && !was) el.focus();
+      }); });
     }
     function updateCounts() {
       sections.forEach((s) => {
@@ -983,8 +990,17 @@
     if (main.querySelector("#wordBtn")) {
       // Saved document -> signature of its therapist; new/unsaved -> the therapist who is writing it.
       const sigFrom = () => (rec.id && !sandbox ? { collection: coll, id: rec.id } : { user: therapistRec().id || S.me.id });
-      main.querySelector("#wordBtn").onclick = () => exportDoc("docx", ensureText(), lang, rec.center, fname(), sigFrom());
-      main.querySelector("#pdfBtn").onclick = () => exportDoc("pdf", ensureText(), lang, rec.center, fname(), sigFrom());
+      // Word / PDF only for a saved document with no unsaved changes (the preview page has no saving, so it stays free).
+      const canExport = () => {
+        if (sandbox) return true;
+        if (id === "new" || dirty) { toast(kind === "scanning" ? "احفظ التقرير في ملف الطفل أولاً، بعدها نزّل Word أو PDF." : "احفظ أولاً، بعدها نزّل Word أو PDF.", true); const sv = main.querySelector("#save"); if (sv) { sv.classList.remove("pulse"); void sv.offsetWidth; sv.classList.add("pulse"); } return false; }
+        if (!docText.value.trim()) { toast("النص فارغ: اضغط «" + (kind === "scanning" ? "إنشاء التقرير" : "توليد النص") + "» ثم احفظ، بعدها نزّل الملف.", true); return false; }
+        return true;
+      };
+      const exText = () => (sandbox ? ensureText() : docText.value);
+      main.querySelector("#wordBtn").onclick = () => { if (canExport()) exportDoc("docx", exText(), lang, rec.center, fname(), sigFrom()); };
+      main.querySelector("#pdfBtn").onclick = () => { if (canExport()) exportDoc("pdf", exText(), lang, rec.center, fname(), sigFrom()); };
+      main.querySelector("#wordBtn").title = main.querySelector("#pdfBtn").title = sandbox ? "" : "التنزيل متاح بعد الحفظ";
     }
 
     // ----- copy text
