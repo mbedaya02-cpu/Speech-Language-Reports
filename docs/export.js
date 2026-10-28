@@ -15,12 +15,15 @@
 //         info4 = label | value | label | value, labels shaded blue (plan / initial header)
 //         grid2 = 2 cells per row, label bold (oral-facial table)
 //    | a | b | c |          table; first row = header (shaded)
+//    ::box                  shaded light paragraph(s) until a blank line (used for the parents' intro)
+//    ### {g} / {a} / {b} text  coloured sub-heading: green / amber / blue-grey (initial scanning lists)
 //    [[SIG]]                the therapist's signature + stamp images (from his profile); blank if none
 //    [[SUP]]                the center's clinical supervisor signature + stamp (Settings). Added automatically
 //                           to the empty signature cell of any "المشرف السريري / Clinical supervisor" table row.
 // =====================================================================
 (function () {
-  const INFO2_FILL = "F2F2F2", INFO4_FILL = "9CC2E5", HEAD_FILL = "9CC2E5";
+  const INFO2_FILL = "F2F2F2", INFO4_FILL = "9CC2E5", HEAD_FILL = "9CC2E5", BOX_FILL = "EEF5F0";
+  const TONE = { g: "2F7D4A", a: "B7791F", b: "5A6B7B" };
 
   function parse(text) {
     const src = String(text || "").split(/\r?\n/);
@@ -40,6 +43,11 @@
         }
         blocks.push({ t: m[1], rows }); continue;
       }
+      if (t === "::box") {
+        const paras = []; i++;
+        while (i < src.length && src[i].trim()) { paras.push(src[i].trim()); i++; }
+        blocks.push({ t: "box", paras }); continue;
+      }
       if (t.startsWith("|")) {
         const rows = [];
         while (i < src.length && src[i].trim().startsWith("|")) {
@@ -50,7 +58,10 @@
         blocks.push({ t: "table", rows }); continue;
       }
       if (t.startsWith("#### ")) blocks.push({ t: "h4", text: t.slice(5) });
-      else if (t.startsWith("### ")) blocks.push({ t: "h3", text: t.slice(4) });
+      else if (t.startsWith("### ")) {
+        const cm = t.slice(4).match(/^\{([gab])\}\s*(.*)$/);
+        blocks.push(cm ? { t: "h3", text: cm[2], color: TONE[cm[1]] } : { t: "h3", text: t.slice(4) });
+      }
       else if (t.startsWith("## ")) blocks.push({ t: "h2", text: t.slice(3) });
       else if (t.startsWith("# ")) blocks.push({ t: "title", text: t.slice(2) });
       else if (t.startsWith("^^ ")) blocks.push({ t: "center", text: t.slice(3) });
@@ -104,7 +115,8 @@
       switch (b.t) {
         case "title": return `<h1>${inlineHtml(b.text)}</h1>`;
         case "h2": return `<h2>${inlineHtml(b.text)}</h2>`;
-        case "h3": return `<h3>${inlineHtml(b.text)}</h3>`;
+        case "h3": return b.color ? `<h3 class="tone" style="color:#${b.color}">${inlineHtml(b.text)}</h3>` : `<h3>${inlineHtml(b.text)}</h3>`;
+        case "box": return `<div class="box">${b.paras.map((x) => `<p>${inlineHtml(x)}</p>`).join("")}</div>`;
         case "h4": return `<h4>${inlineHtml(b.text)}</h4>`;
         case "center": return `<p class="center"><b>${inlineHtml(b.text)}</b></p>`;
         case "bullet": return `<p class="bullet">${inlineHtml(b.text)}</p>`;
@@ -144,6 +156,9 @@
   h1 { font-size: 15pt; text-align: center; margin: 4px 0 10px; }
   h2 { font-size: 13pt; margin: 14px 0 4px; page-break-after: avoid; }
   h3 { font-size: 12pt; margin: 10px 0 3px; text-decoration: underline; page-break-after: avoid; }
+  h3.tone { text-decoration: none; }
+  .box { background: #${BOX_FILL}; border-radius: 6px; padding: 8px 12px; margin: 6px 0 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .box p:last-child { margin-bottom: 0; }
   h4 { font-size: 12pt; margin: 8px 18px 3px; text-decoration: underline; page-break-after: avoid; }
   p { margin: 0 0 4px; text-align: justify; }
   p.center { text-align: center; margin: 6px 0; }
@@ -229,7 +244,10 @@ ${body}
       switch (b.t) {
         case "title": kids.push(P(b.text, { bold: true, size: 30, align: d.AlignmentType.CENTER, after: 160 })); break;
         case "h2": kids.push(P(b.text, { bold: true, size: 26, before: 200, after: 60, keepNext: true })); break;
-        case "h3": kids.push(P(b.text, { bold: true, underline: true, before: 120, after: 40, keepNext: true })); break;
+        case "h3": kids.push(P(b.text, { bold: true, underline: !b.color, color: b.color, before: 120, after: 40, keepNext: true })); break;
+        case "box": b.paras.forEach((x, k) => kids.push(new d.Paragraph({ bidirectional: rtl, alignment: d.AlignmentType.JUSTIFIED,
+          spacing: { before: k ? 0 : 80, after: k === b.paras.length - 1 ? 160 : 60, line: 276 },
+          shading: { fill: BOX_FILL, type: d.ShadingType.CLEAR, color: "auto" }, children: runs(x) }))); break;
         case "h4": kids.push(P(b.text, { bold: true, underline: true, before: 100, after: 40, keepNext: true, indent: 360 })); break;
         case "center": kids.push(P(b.text, { bold: true, align: d.AlignmentType.CENTER, before: 60, after: 60 })); break;
         case "bullet": kids.push(new d.Paragraph({ bidirectional: rtl, alignment: d.AlignmentType.JUSTIFIED, spacing: { after: 40, line: 276 },

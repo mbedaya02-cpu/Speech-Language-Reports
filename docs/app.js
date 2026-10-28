@@ -23,9 +23,9 @@
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
-  const KIND = { "تقرير التقييم الأولي": "initial", "تقرير تقييم": "evaluation", "تقرير إعادة تقييم": "evaluation", "تقرير تقييم مرحلي": "progress", "تقرير خروج": "discharge", "تقرير لجهة خارجية": "external" };
+  const KIND = { "تقرير الملاحظة الأولية": "scanning", "تقرير التقييم الأولي": "initial", "تقرير تقييم": "evaluation", "تقرير إعادة تقييم": "evaluation", "تقرير تقييم مرحلي": "progress", "تقرير خروج": "discharge", "تقرير لجهة خارجية": "external" };
   const REPORT_TYPES = Object.keys(KIND);
-  const REPORT_HINT = { "تقرير التقييم الأولي": "نموذج مختصر (ST_IA)", "تقرير تقييم": "التقييم الشامل بالعربي أو الإنجليزي", "تقرير إعادة تقييم": "نفس نموذج التقييم الشامل", "تقرير تقييم مرحلي": "تقرير التقدم المرتبط بالخطة", "تقرير خروج": "عند إنهاء العلاج", "تقرير لجهة خارجية": "مدرسة / تأمين / طبيب" };
+  const REPORT_HINT = { "تقرير الملاحظة الأولية": "Initial Scanning — انطباع الجلسة الأولى للأهل", "تقرير التقييم الأولي": "نموذج مختصر (ST_IA)", "تقرير تقييم": "التقييم الشامل بالعربي أو الإنجليزي", "تقرير إعادة تقييم": "نفس نموذج التقييم الشامل", "تقرير تقييم مرحلي": "تقرير التقدم المرتبط بالخطة", "تقرير خروج": "عند إنهاء العلاج", "تقرير لجهة خارجية": "مدرسة / تأمين / طبيب" };
   const PLAN_STATUS = ["سارية", "تم التجديد", "منتهية", "ملغاة"];
   const PATIENT_STATUS = ["نشط", "متوقف مؤقتاً", "مُخرَّج"];
 
@@ -618,6 +618,12 @@
     const pcUi = UI === "en" ? pcFor("en") : pcAr;
     const gxUi = (o) => FC.gx(tx(o), pcUi);
     const field = isPlan ? "plan_data" : "assessment";
+    let restored = null;
+    if (S.restoreDraft) {
+      const k = S.restoreDraft; S.restoreDraft = null;
+      try { restored = JSON.parse(localStorage.getItem(k) || "null"); } catch (_) {}
+      if (restored) { Object.assign(rec, restored.rec || {}); rec[field] = restored.data; if (isPlan) rec.plan_text = restored.text; else rec.report_text = restored.text; lang = (isPlan ? rec.plan_lang : rec.report_lang) || lang; dirty = true; }
+    }
     const data = (rec[field] && Object.keys(rec[field]).length) ? rec[field] : Object.assign(form.defaults(pcAr), rec[field] || {});
     if (isPlan) data.blocks = data.blocks || [];
     const fstate = {};
@@ -659,7 +665,7 @@
         case "textarea": inner = `<textarea class="input" data-path="${f.id}" rows="3">${esc(v)}</textarea>` + sugg; break;
         case "list": inner = `<textarea class="input" data-path="${f.id}" rows="4" placeholder="سطر لكل بند">${esc(v)}</textarea>` + sugg + (f.suggestFrom ? `<div class="chips sugg-row" data-dyn="${f.suggestFrom}" data-for="${f.id}"></div>` : ""); break;
         case "matrix":
-          inner = `<div class="table-wrap"><table class="t matrix"><tbody>${f.rows.map((r) => `<tr><td class="mlabel">${esc(f.rowLabel === "short" && r.short && UI !== "en" ? r.short : gxUi(r))}</td>
+          inner = `<div class="table-wrap"><table class="t matrix${f.tone ? " tone" : ""}"><tbody>${f.rows.map((r) => `<tr><td class="mlabel">${esc(f.rowLabel === "short" && r.short && UI !== "en" ? r.short : gxUi(r))}</td>
             ${f.groups.map((g) => `<td>${g.label ? `<div class="hint">${esc(g.label)}</div>` : ""}<div class="chips">${g.options.map((o) => {
               const cur = ((v || {})[r.v] || {})[g.key];
               return `<button type="button" class="chip${cur === o.v ? " on" : ""}" data-path="${f.id}.${r.v}.${g.key}" data-v="${esc(o.v)}" data-mode="single">${esc(tx(o))}</button>`;
@@ -686,9 +692,10 @@
         <div class="field"><label class="f">عدد الجلسات الموافق عليها (تأمين)</label><input class="input" type="number" min="0" data-path="sessions_approved" value="${esc(rec.sessions_approved ?? "")}"></div>`
       : `
         <div class="field"><label class="f">المركز (الترويسة)</label><select class="input" data-path="center">${S.centers.map((c) => `<option value="${c.id}" ${rec.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
-        <div class="field"><label class="f">تاريخ التقرير</label><input class="input" type="date" id="rd" value="${d10(rec.report_date)}"></div>
+        <div class="field"><label class="f">${esc(form.dateLabel ? tx(form.dateLabel) : "تاريخ التقرير")}</label><input class="input" type="date" id="rd" value="${d10(rec.report_date)}"></div>
         <div class="field"><label class="f">حالة التقرير</label><select class="input" data-path="status">${["مسودة", "نهائي"].map((t) => `<option ${rec.status === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
-        <div class="field"><label class="f">موعد التقرير التالي (للتذكير)</label><input class="input" type="date" id="nd" value="${d10(rec.next_due)}"><div class="hint">فارغ = لا يوجد تقرير لاحق. الافتراضي بعد 6 أشهر.</div></div>
+        ${form.noNextDue ? "" : `<div class="field"><label class="f">موعد التقرير التالي (للتذكير)</label><input class="input" type="date" id="nd" value="${d10(rec.next_due)}"><div class="hint">فارغ = لا يوجد تقرير لاحق. الافتراضي بعد 6 أشهر.</div></div>`}
+        ${isAdmin() && !sb ? `<div class="field"><label class="f">الأخصائي/ة</label><select class="input" id="thSel"></select><div class="hint">القائمة حسب المركز المختار.</div></div>` : `<div class="field"><label class="f">الأخصائي/ة</label><div class="input" style="background:var(--bg-soft,#f6f6f6)">${esc(((rec.expand && rec.expand.therapist) || S.me).name || "")}</div></div>`}
         ${form.usesPlan ? `<div class="field" style="grid-column: span 2"><label class="f">الخطة المرتبطة</label>${plans.length ? `<select class="input" id="planSel">${plans.map((p) => `<option value="${p.id}" ${p.id === rec.plan ? "selected" : ""}>${esc(p.plan_type)}: ${d10(p.start_date)} ← ${d10(p.end_date)} (${esc(p.status)})</option>`).join("")}</select>` : `<div class="note-box">لا توجد خطة محفوظة لهذا المريض.</div>`}</div>` : ""}`;
 
     const main = shell(sb ? "forms" : "patients", "");
@@ -707,15 +714,17 @@
           <div class="panel" id="topPanel"><div class="panel-head"><h2 class="grow">بيانات ${isPlan ? "الخطة" : "التقرير"}</h2></div><div class="panel-body"><div class="grid cols-3">${topFields}</div></div></div>
           <div id="formRoot">${formHtml}</div>
           <div class="panel" id="s-doc"><div class="panel-head"><h2 class="grow">النص النهائي والتصدير</h2><span class="hint">راجع النص وعدّله بحرية قبل الحفظ</span></div><div class="panel-body">
-            <details class="hint" style="margin-bottom:8px"><summary>رموز التنسيق في النص</summary># عنوان · ## عنوان قسم · ### عنوان فرعي مسطّر · - نقطة · 1. ترقيم · **عريض** · ^^ سطر في الوسط · | جدول | · ::info2 / ::info4 / ::grid2 جداول البيانات</details>
+            <details class="hint" style="margin-bottom:8px"><summary>رموز التنسيق في النص</summary># عنوان · ## عنوان قسم · ### عنوان فرعي مسطّر · - نقطة · 1. ترقيم · **عريض** · ^^ سطر في الوسط · | جدول | · ::info2 / ::info4 / ::grid2 جداول البيانات · ::box فقرة بخلفية خفيفة · ### {g} / {a} / {b} عنوان ملوّن (أخضر / كهرماني / أزرق رمادي)</details>
             <textarea class="input doc" id="docText" placeholder="اختر الإجابات أعلاه ثم اضغط «توليد النص»…">${esc(isPlan ? rec.plan_text : rec.report_text)}</textarea>
             ${id !== "new" ? filesBlock(rec, coll) : ""}
           </div>
           ${readonly && !sb ? "" : `<div class="sticky-actions">
             <div class="lang-toggle" id="langT"><button data-l="ar">عربي</button><button data-l="en">English</button></div>
-            <button class="btn" id="gen">توليد النص</button><span class="grow"></span>
+            <button class="btn" id="gen">${kind === "scanning" ? "إنشاء التقرير" : "توليد النص"}</button>
+            <button class="btn" id="copyBtn" title="نسخ النص">نسخ النص</button><span class="grow"></span>
             <button class="btn" id="wordBtn">Word</button><button class="btn" id="pdfBtn">PDF</button>
-            ${sb ? `<span class="pill warn">معاينة — لا يوجد حفظ</span>` : `<button class="btn primary" id="save">حفظ</button>`}</div>`}
+            ${sb ? `<span class="pill warn">معاينة — لا يوجد حفظ</span>` : `<button class="btn primary" id="save">${kind === "scanning" ? "حفظ في ملف الطفل" : "حفظ"}</button>`}
+            ${!isPlan && !sb && kind === "scanning" ? `<a class="btn" id="newForm" href="#/report/new?patient=${patient.id}&type=${encodeURIComponent(rec.report_type)}">نموذج جديد</a>` : ""}</div>`}
           </div>
         </div>
       </div>`;
@@ -892,7 +901,22 @@
       var syncEnd = function () { if (sd.value && data.months) { ed.value = addMonths(sd.value, Number(data.months)); rec.end_date = toPb(ed.value); renderGoalsEditor(); } };
     } else {
       main.querySelector("#rd").oninput = (e) => { rec.report_date = toPb(e.target.value); dirty = true; };
-      main.querySelector("#nd").oninput = (e) => { rec.next_due = toPb(e.target.value); dirty = true; };
+      const ndEl = main.querySelector("#nd");
+      if (ndEl) ndEl.oninput = (e) => { rec.next_due = toPb(e.target.value); dirty = true; };
+      // admin: choose the therapist of this report, filtered by the selected center
+      const thSel = main.querySelector("#thSel");
+      if (thSel) {
+        const fillTh = () => {
+          const cur = rec.therapist || (rec.expand && rec.expand.therapist && rec.expand.therapist.id) || S.me.id;
+          const list = (S.therapists || []).filter((t) => (t.centers || []).includes(rec.center) || t.id === cur);
+          if (!list.some((t) => t.id === S.me.id) && cur === S.me.id) list.unshift(S.me);
+          thSel.innerHTML = list.map((t) => `<option value="${t.id}" ${t.id === cur ? "selected" : ""}>${esc(t.name || t.email)}</option>`).join("");
+        };
+        fillTh();
+        thSel.onchange = () => { rec.therapist = thSel.value; rec.expand = Object.assign({}, rec.expand, { therapist: (S.therapists || []).find((t) => t.id === thSel.value) || S.me }); dirty = true; };
+        const cSel = top.querySelector('[data-path="center"]');
+        if (cSel) cSel.addEventListener("change", () => setTimeout(fillTh, 0));
+      }
     }
 
     // ----- language toggle
@@ -916,7 +940,7 @@
     setLang(lang);
 
     // ----- generation & export
-    const therapistRec = () => (rec.expand && rec.expand.therapist) || S.me;
+    const therapistRec = () => (rec.expand && rec.expand.therapist) || (rec.therapist && (S.therapists || []).find((t) => t.id === rec.therapist)) || S.me;
     const ctxFor = (l) => {
       const c = centerById(rec.center); const p = planRec();
       return { lang: l, pc: pcFor(l), patient, therapistName: clinicianName(therapistRec(), l), reportDate: d10(isPlan ? rec.start_date : rec.report_date),
@@ -963,6 +987,39 @@
       main.querySelector("#pdfBtn").onclick = () => exportDoc("pdf", ensureText(), lang, rec.center, fname(), sigFrom());
     }
 
+    // ----- copy text
+    const copyBtn = main.querySelector("#copyBtn");
+    if (copyBtn) copyBtn.onclick = async () => {
+      if (!docText.value.trim()) { docText.value = genText(); dirty = true; }
+      try { await navigator.clipboard.writeText(docText.value); toast("تم نسخ النص ✓"); }
+      catch (_) { docText.focus(); docText.select(); try { document.execCommand("copy"); toast("تم نسخ النص ✓"); } catch (e) { toast("انسخ النص يدوياً (Ctrl+C)", true); } }
+    };
+
+    // ----- auto-saved draft (this browser only) so nothing is lost while filling
+    const DRAFT_KEYS = ["center", "report_date", "next_due", "status", "therapist", "report_lang", "plan_lang", "start_date", "end_date", "plan_type", "sessions_approved", "plan"];
+    const draftKey = sb || readonly ? "" : `draft:${coll}:${id === "new" ? `new:${patient.id}:${isPlan ? "plan" : rec.report_type}` : id}`;
+    const writeDraft = () => {
+      if (!draftKey || !dirty) return;
+      const r = {}; DRAFT_KEYS.forEach((k) => { if (rec[k] !== undefined) r[k] = rec[k]; });
+      try { localStorage.setItem(draftKey, JSON.stringify({ t: Date.now(), data, rec: r, text: docText.value })); } catch (_) {}
+    };
+    let draftTimer = 0;
+    const schedDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(writeDraft, 700); };
+    if (draftKey) { main.addEventListener("input", schedDraft); main.addEventListener("click", schedDraft); main.addEventListener("change", schedDraft); }
+    const clearDraft = () => { clearTimeout(draftTimer); if (draftKey) try { localStorage.removeItem(draftKey); } catch (_) {} };
+    if (draftKey) {
+      let dr = null; try { dr = JSON.parse(localStorage.getItem(draftKey) || "null"); } catch (_) {}
+      const savedAt = rec.updated ? new Date(String(rec.updated).replace(" ", "T")).getTime() : 0;
+      if (dr && dr.t > savedAt) {
+        const bar = document.createElement("div");
+        bar.className = "note-box"; bar.style.cssText = "margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap";
+        bar.innerHTML = `<strong>يوجد مسودة غير محفوظة</strong> <span class="hint">(${esc(new Date(dr.t).toLocaleString(UI === "en" ? "en-GB" : "ar-EG"))})</span><span style="flex:1"></span><button class="btn sm primary" id="drRestore">استرجاع المسودة</button><button class="btn sm" id="drDrop">تجاهل</button>`;
+        main.querySelector(".page-head").after(bar);
+        bar.querySelector("#drRestore").onclick = () => { S.restoreDraft = draftKey; dirty = false; route(); };
+        bar.querySelector("#drDrop").onclick = () => { clearDraft(); bar.remove(); };
+      } else if (dr) clearDraft();
+    }
+
     // ----- save
     const save = main.querySelector("#save");
     if (save) save.onclick = async () => {
@@ -982,11 +1039,12 @@
         } else {
           payload = { patient: patient.id, center: rec.center, report_type: rec.report_type, report_date: rec.report_date, next_due: rec.next_due || "",
             status: rec.status, report_lang: lang, assessment: data, report_text: docText.value, plan: rec.plan || "" };
+          if (isAdmin() && rec.therapist) payload.therapist = rec.therapist;
         }
         payload = filePayload(root, fstate, payload);
         if (id === "new" && rec.previous) payload.previous = rec.previous;
         const saved = id === "new" ? await pb.collection(coll).create(payload) : await pb.collection(coll).update(id, payload);
-        dirty = false; toast("تم الحفظ ✓");
+        clearDraft(); dirty = false; toast("تم الحفظ ✓");
         if (id === "new") { history.replaceState(null, "", `#/${isPlan ? "plan" : "report"}/${saved.id}`); lastHash = location.hash; }
         route();
       } catch (e) { toast(errText(e), true); }
@@ -1026,6 +1084,7 @@
       <div class="grid cols-3">
         ${card("#/try/plan", "الخطة التربوية الفردية للنطق واللغة", "بيانات الخطة، ملخص التقييم، الأهداف وجداولها، المتابعة والاعتماد", "نموذج ST_TP")}
         ${card(T("تقرير تقييم"), "تقرير تقييم", "التقييم الشامل بالعربي أو الإنجليزي", "Evaluation Report")}
+        ${card(T("تقرير الملاحظة الأولية"), "تقرير الملاحظة الأولية", "انطباع الجلسة الأولى للأهل: تقييم المهارات بأزرار وتقرير دافئ جاهز", "Initial Scanning")}
         ${card(T("تقرير التقييم الأولي"), "تقرير التقييم الأولي", "النموذج المختصر", "نموذج ST_IA")}
         ${card(T("تقرير تقييم مرحلي"), "تقرير تقييم مرحلي", "مرتبط بأهداف الخطة (خطة تجريبية جاهزة للمعاينة)", "نموذج PRO_REP")}
         ${card(T("تقرير إعادة تقييم"), "تقرير إعادة تقييم", "نفس نموذج التقييم الشامل بعنوان إعادة تقييم", "")}

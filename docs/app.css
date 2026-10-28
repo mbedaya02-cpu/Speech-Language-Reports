@@ -216,3 +216,15 @@ details > summary.panel-head::after { content: "▾"; color: var(--muted); }
 .domain-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0 10px; padding: 10px 12px; background: var(--brand-soft); border-radius: 10px; }
 .ltg-block { margin-inline-start: 18px; border-inline-start: 3px solid var(--brand-soft); }
 .ltg-bank summary { margin: 6px 0; }
+
+/* Initial Scanning: 4-state skill rating (green / amber / blue-grey / neutral) */
+table.matrix.tone td.mlabel { white-space: normal; width: auto; min-width: 180px; max-width: 360px; }
+table.matrix.tone .chip.on[data-v="shown"] { background: #2F7D4A; border-color: #2F7D4A; color: #fff; }
+table.matrix.tone .chip.on[data-v="emerging"] { background: #B7791F; border-color: #B7791F; color: #fff; }
+table.matrix.tone .chip.on[data-v="not"] { background: #5A6B7B; border-color: #5A6B7B; color: #fff; }
+table.matrix.tone .chip.on[data-v="na"] { background: #EEF0F2; border-color: #C9CED4; color: #555; }
+@media (max-width: 720px) {
+  table.matrix.tone, table.matrix.tone tbody, table.matrix.tone tr, table.matrix.tone td { display: block; width: 100%; max-width: none; }
+  table.matrix.tone tr { border-bottom: 1px solid #e5e5e5; padding: 6px 0; }
+  table.matrix.tone td { border: 0; padding: 3px 4px; }
+}

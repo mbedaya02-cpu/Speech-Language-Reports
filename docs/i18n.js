@@ -20,6 +20,13 @@
     "كل المراكز": "All centers", "المركز": "Center", "خروج": "Log out",
     "مركز بداية للتدريب والتأهيل": "Bedaya Rehabilitation and Training Center", "مركز ألباين الطبي": "Alpine Medical Center",
     // report / plan types and statuses
+    "تقرير الملاحظة الأولية": "Initial scanning report", "Initial Scanning — انطباع الجلسة الأولى للأهل": "Initial Scanning — first-session impressions for parents",
+    "انطباع الجلسة الأولى للأهل: تقييم المهارات بأزرار وتقرير دافئ جاهز": "First-session impressions for parents: rate skills with buttons, get a warm ready report",
+    "تاريخ الجلسة": "Session date", "الأخصائي/ة": "Therapist", "القائمة حسب المركز المختار.": "List follows the selected center.",
+    "إنشاء التقرير": "Create report", "نسخ النص": "Copy text", "حفظ في ملف الطفل": "Save to child's file", "نموذج جديد": "New form",
+    "تم نسخ النص ✓": "Text copied ✓", "انسخ النص يدوياً (Ctrl+C)": "Copy the text manually (Ctrl+C)",
+    "يوجد مسودة غير محفوظة": "There is an unsaved draft", "استرجاع المسودة": "Restore draft", "تجاهل": "Dismiss",
+    "ظهرت": "Shown", "بدأت تظهر": "Emerging", "لم تظهر": "Not shown", "لم تُقيَّم": "Not rated",
     "تقرير التقييم الأولي": "Initial assessment report", "تقرير تقييم": "Evaluation report", "تقرير إعادة تقييم": "Re-evaluation report",
     "تقرير تقييم مرحلي": "Progress report", "تقرير خروج": "Discharge report", "تقرير لجهة خارجية": "External report",
     "نموذج مختصر (ST_IA)": "Short form (ST_IA)", "التقييم الشامل بالعربي أو الإنجليزي": "Full evaluation in Arabic or English",
