@@ -284,6 +284,7 @@
       if (h[0] === "import" && (isAdmin() || S.me.role === "reception")) return pageImport();
       if (h[0] === "audit" && isAdmin()) return await pageAudit();
       if (h[0] === "settings" && isAdmin()) return await pageSettings();
+      if (h[0] === "soap" && window.SOAP && h[1]) { sandbox = false; return await window.SOAP.route(h.slice(1)); }
       if (h[0] === "quality" && window.QA && (isAdmin() || isTherapist())) { sandbox = false; return await window.QA.route(h.slice(1)); }
       shell("", `<div class="panel empty">الصفحة غير موجودة.</div>`);
     } catch (err) {
@@ -304,7 +305,23 @@
       pb.collection("reports").getFullList({ filter: andF(pb.filter('followed_up = false && next_due != "" && next_due <= {:l}', { l: limit }), notDischarged, cf), sort: "next_due", expand: "patient,therapist" }),
     ]);
     const nextType = (t) => (["تقرير خروج", "تقرير لجهة خارجية"].includes(t) ? t : "تقرير تقييم مرحلي");
-    return [
+    // mandatory progress report every 6 months (same rule as progressDue_ in Reminders.gs)
+    const [actPlans, progs] = await Promise.all([
+      pb.collection("plans").getFullList({ filter: andF('status = "سارية"', notDischarged, cf), expand: "patient,therapist" }),
+      pb.collection("reports").getFullList({ filter: andF('report_type = "تقرير تقييم مرحلي"', cf), sort: "-report_date", fields: "patient,report_date" }),
+    ]);
+    const lastProg = {}; progs.forEach((r) => { const d = d10(r.report_date); if (!lastProg[r.patient] || d > lastProg[r.patient]) lastProg[r.patient] = d; });
+    const covered = new Set(reports.map((r) => r.patient));
+    const progDue = [];
+    actPlans.forEach((pl) => {
+      if (covered.has(pl.patient)) return;
+      const start = d10(pl.start_date), base = lastProg[pl.patient] && lastProg[pl.patient] > start ? lastProg[pl.patient] : start;
+      const due = addMonths(base, 6);
+      if (due > d10(limit) || due >= d10(pl.end_date)) return;
+      covered.add(pl.patient);
+      progDue.push({ kind: "progress", rec: pl, due, what: "تقرير تقييم مرحلي إلزامي (كل 6 أشهر)", next: "تقرير تقييم مرحلي", p: pl.expand && pl.expand.patient });
+    });
+    return [...progDue,
       ...plans.map((r) => ({ kind: "plan", rec: r, due: d10(r.end_date), what: `تجديد الخطة / إعادة التقييم`, p: r.expand && r.expand.patient })),
       ...reports.map((r) => ({ kind: "report", rec: r, due: d10(r.next_due), what: `تقرير مستحق (بعد ${r.report_type})`, next: nextType(r.report_type), p: r.expand && r.expand.patient })),
     ].map((i) => ({ ...i, days: daysLeft(i.due) })).sort((a, b) => a.days - b.days);
@@ -319,10 +336,10 @@
         <td class="nowrap">${esc(i.due)}</td>
         <td>${i.p ? centerTag(i.p.center) : ""}</td>
         <td>${esc(i.rec.expand && i.rec.expand.therapist ? i.rec.expand.therapist.name : "")}</td>
-        <td class="nowrap">${canClinical() && i.p ? (i.kind === "plan"
+        <td class="nowrap">${canClinical() && i.p ? (i.kind === "progress" ? `<a class="btn sm primary" href="#/report/new?patient=${i.p.id}&type=${encodeURIComponent(i.next)}&soap=1">كتابة التقرير من الملاحظات</a>` : i.kind === "plan"
           ? `<a class="btn sm primary" href="#/plan/new?patient=${i.p.id}&renew=${i.rec.id}">تجديد الخطة</a>`
           : `<a class="btn sm primary" href="#/report/new?patient=${i.p.id}&type=${encodeURIComponent(i.next)}&prev=${i.rec.id}">كتابة التقرير</a>`) : ""}
-          <a class="btn sm" href="#/${i.kind}/${i.rec.id}">فتح</a></td></tr>`).join("");
+          <a class="btn sm" href="#/${i.kind === "progress" ? "plan" : i.kind}/${i.rec.id}">فتح</a></td></tr>`).join("");
   }
   const dueTable = (items) => `<div class="table-wrap"><table class="t"><thead><tr><th>الموعد</th><th>رقم الملف</th><th>المريض</th><th>المطلوب</th><th>التاريخ</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${dueRows(items)}</tbody></table></div>`;
 
@@ -458,9 +475,10 @@
     const main = shell("patients", `<div class="empty">جاري التحميل…</div>`);
     const tab = qs().tab || "plans";
     const p = await pb.collection("patients").getOne(id, { expand: "therapists" });
-    const [plans, reports] = await Promise.all([
+    const [plans, reports, soaps] = await Promise.all([
       pb.collection("plans").getFullList({ filter: pb.filter("patient = {:id}", { id }), sort: "-start_date", expand: "therapist" }),
       pb.collection("reports").getFullList({ filter: pb.filter("patient = {:id}", { id }), sort: "-report_date", expand: "therapist" }),
+      pb.collection("soap_notes").getFullList({ filter: pb.filter("patient = {:id}", { id }), sort: "-date", expand: "therapist" }).catch(() => []),
     ]);
     const info = [
       ["رقم الملف", `<span class="mono">${esc(p.file_no)}</span>`], ["المركز", centerTag(p.center)],
@@ -488,7 +506,7 @@
       <div class="panel"><div class="panel-body"><div class="grid cols-4">${info.map(([k, v]) => `<div><div class="hint">${k}</div><div>${v}</div></div>`).join("")}</div>
         ${p.notes ? `<div class="note-box" style="margin-top:14px">${esc(p.notes)}</div>` : ""}</div></div>
       <div class="panel">
-        <div class="tabs"><button data-tab="plans" class="${tab === "plans" ? "on" : ""}">الخطط العلاجية (${plans.length})</button><button data-tab="reports" class="${tab === "reports" ? "on" : ""}">التقارير (${reports.length})</button></div>
+        <div class="tabs"><button data-tab="plans" class="${tab === "plans" ? "on" : ""}">الخطط العلاجية (${plans.length})</button><button data-tab="reports" class="${tab === "reports" ? "on" : ""}">التقارير (${reports.length})</button><button data-tab="soap" class="${tab === "soap" ? "on" : ""}">ملاحظات الجلسات SOAP (${soaps.length})</button></div>
         <div data-pane="plans" class="${tab === "plans" ? "" : "hidden"}">
           <div class="panel-head"><span class="grow muted">الخطة التربوية الفردية للنطق واللغة</span>${canClinical() ? `<button class="btn" id="upPlan">⬆ رفع خطة جاهزة (ملف)</button> <a class="btn primary" href="#/plan/new?patient=${p.id}">+ خطة جديدة</a>` : ""}</div>
           ${plans.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>الفترة</th><th>الحالة</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${planRows}</tbody></table></div>` : `<div class="empty">لا توجد خطط بعد.</div>`}
@@ -497,12 +515,14 @@
           <div class="panel-head"><span class="grow muted">تقييم أولي، تقرير تقييم، إعادة تقييم، تقييم مرحلي، خروج، أو تقرير لجهة خارجية</span>${canClinical() ? `<button class="btn primary" id="newR">+ تقرير جديد</button>` : ""}</div>
           ${reports.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>التقرير التالي</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${reportRows}</tbody></table></div>` : `<div class="empty">لا توجد تقارير بعد.</div>`}
         </div>
+        <div data-pane="soap" class="${tab === "soap" ? "" : "hidden"}">${window.SOAP ? window.SOAP.listHtml(soaps, p, canClinical()) : ""}</div>
       </div>`;
     main.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => {
       main.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
       main.querySelectorAll("[data-pane]").forEach((x) => x.classList.toggle("hidden", x.dataset.pane !== b.dataset.tab));
       history.replaceState(null, "", `#/patient/${id}?tab=${b.dataset.tab}`); lastHash = location.hash;
     });
+    main.querySelectorAll('[data-pane="soap"] [data-go]').forEach((tr) => tr.onclick = (e) => { if (!e.target.closest("a")) go(tr.dataset.go); });
     main.querySelector("#editP").onclick = () => patientModal(p, () => route());
     const del = main.querySelector("#delP");
     if (del) del.onclick = async () => {
@@ -704,7 +724,12 @@
     let plans = [];
     if (form.usesPlan) {
       plans = sb ? [samplePlan(patient)] : await pb.collection("plans").getFullList({ filter: pb.filter("patient = {:p}", { p: patient.id }), sort: "-start_date" });
-      if (plans.length && !rec.plan) rec.plan = (plans.find((p) => p.status === "سارية") || plans[0]).id;
+      if (plans.length && !rec.plan && !q.plan && q.soap === "1" && !sb) {
+        // a report built from session notes links to the plan those notes were written on
+        const lastNote = await pb.collection("soap_notes").getFirstListItem(pb.filter("patient = {:p} && plan != ''", { p: patient.id }), { sort: "-date" }).catch(() => null);
+        if (lastNote && plans.some((p) => p.id === lastNote.plan)) rec.plan = lastNote.plan;
+      }
+      if (plans.length && !rec.plan) rec.plan = (q.plan && plans.find((p) => p.id === q.plan) ? q.plan : (plans.find((p) => p.status === "سارية") || plans[0]).id);
     }
     const planRec = () => plans.find((p) => p.id === rec.plan);
     const planGoals = (l) => { const p = planRec(); return p && p.plan_data ? window.Forms.plan.allGoals(p.plan_data, l, pcFor(l)) : []; };
@@ -713,6 +738,31 @@
     if (kind === "progress" && id === "new" && !data.prev_level) {
       const pd = (planRec() || {}).plan_data || {};
       data.prev_level = [pd.r_receptive, pd.r_expressive, pd.r_articulation].filter(Boolean).map((t) => FC.gx(t, pcAr)).join(" ");
+    }
+    // progress report built from the session (SOAP) notes: on request (?soap=1 / button) — period = since the last progress report (or plan start)
+    let soapInfo = "";
+    if (kind === "progress" && !sb && window.SOAP && ((id === "new" && q.soap === "1") || S.soapFillFor === id)) {
+      S.soapFillFor = null;
+      const p = planRec();
+      if (p) {
+        const [notes, progsP] = await Promise.all([
+          pb.collection("soap_notes").getFullList({ filter: pb.filter("patient = {:p} && plan = {:pl}", { p: patient.id, pl: p.id }), sort: "date" }),
+          pb.collection("reports").getFullList({ filter: pb.filter("patient = {:p} && report_type = {:t}", { p: patient.id, t: "تقرير تقييم مرحلي" }), sort: "-report_date" }),
+        ]);
+        const to = d10(rec.report_date) || today();
+        const prevR = progsP.find((r) => r.id !== rec.id && d10(r.report_date) < to);
+        const after = prevR && d10(prevR.report_date) > d10(p.start_date) ? d10(prevR.report_date) : addDays(d10(p.start_date), -1);  // notes strictly after this date
+        const from = addDays(after, 1);
+        const goals = window.Forms.plan.allGoals(p.plan_data || {}, "ar", pcAr);
+        const res = window.SOAP.progressFromNotes(notes, goals, after, to);
+        data.gs = data.gs || {};
+        res.rows.forEach((r) => { if (r.n) data.gs[r.g.key] = { s: r.s, pct: r.last }; });
+        data.current_level = window.SOAP.progressSummary(res, from, to, pcFor(lang), lang);
+        data.soap_period = { from, to, sessions: res.total, attended: res.attended };
+        soapInfo = res.total ? `<div class="note-box" style="margin-bottom:12px">تمت تعبئة حالة الأهداف والمستوى الحالي من ${res.total} ملاحظة جلسة (${from} ← ${to}). راجعها قبل الحفظ.</div>`
+          : `<div class="note-box" style="margin-bottom:12px">لا توجد ملاحظات جلسات (SOAP) لهذه الخطة بعد ${from}. أضف ملاحظات الجلسات من ملف الطفل أولاً.</div>`;
+        dirty = true;
+      }
     }
 
     // ----- field renderer
@@ -784,6 +834,7 @@
       <div class="editor">
         <aside class="side panel"><div class="panel-body side-nav">${sideHtml}</div></aside>
         <div id="root">
+          ${soapInfo}${kind === "progress" && !sb ? `<div style="margin-bottom:10px"><button class="btn" id="soapFill" type="button">⟳ تعبئة من ملاحظات الجلسات (SOAP)</button></div>` : ""}
           <div class="panel" id="topPanel"><div class="panel-head"><h2 class="grow">بيانات ${isPlan ? "الخطة" : "التقرير"}</h2></div><div class="panel-body"><div class="grid cols-3">${topFields}</div></div></div>
           <div id="formRoot">${formHtml}</div>
           <div class="panel" id="s-doc"><div class="panel-head"><h2 class="grow">النص النهائي والتصدير</h2><span class="hint">راجع النص وعدّله بحرية قبل الحفظ</span></div><div class="panel-body">
@@ -1092,6 +1143,15 @@
       main.querySelector("#pdfBtn").onclick = () => { if (canExport()) exportDoc("pdf", exText(), lang, rec.center, fname(), sigFrom()); };
       main.querySelector("#wordBtn").title = main.querySelector("#pdfBtn").title = sandbox ? "" : "التنزيل متاح بعد الحفظ";
     }
+
+    // ----- progress: (re)fill from SOAP notes
+    const sfb = main.querySelector("#soapFill");
+    if (sfb) sfb.onclick = () => {
+      if (!rec.plan) { toast("اختر الخطة المرتبطة أولاً.", true); return; }
+      if (!confirm("تعبئة حالة الأهداف والمستوى الحالي من ملاحظات الجلسات؟ (القيم الحالية لهذين الحقلين ستُستبدل)")) return;
+      if (id === "new") { const u = new URLSearchParams(location.hash.split("?")[1] || ""); u.set("soap", "1"); u.set("plan", rec.plan); dirty = false; history.replaceState(null, "", "#/report/new?" + u.toString()); route(); }
+      else { if (dirty) { toast("احفظ تعديلاتك أولاً، بعدها اضغط التعبئة من الملاحظات.", true); return; } S.soapFillFor = id; route(); }
+    };
 
     // ----- copy text
     const copyBtn = main.querySelector("#copyBtn");

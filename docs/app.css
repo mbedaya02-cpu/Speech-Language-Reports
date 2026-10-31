@@ -284,3 +284,11 @@ table.t.mini td { padding: 4px 6px; font-size: 13px; }
   .qa-side { position: static; order: -1; }
   .qa-sess-b { grid-template-columns: 1fr; }
 }
+
+/* ---------- SOAP session notes ---------- */
+.soap-goals { display: flex; flex-direction: column; gap: 6px; }
+.soap-g { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.soap-g.on { border-color: var(--brand); background: var(--brand-soft); }
+.soap-goal { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #fbfcfd; }
+.soap-goal-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.soap-pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; font-family: inherit; font-size: 14px; }

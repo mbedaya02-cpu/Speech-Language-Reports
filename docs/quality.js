@@ -128,6 +128,7 @@
   const INACTIVE_EVAL = ["achieved", "discontinued"];
   function suggestStatus(a, s) {
     const snap = a.plan_snap[s.plan];
+    if ((!s.goals || !s.goals.length) && s.extra) return "ADDITIONAL";
     if (!s.goals || !s.goals.length) return "UNLINKED";
     if (!snap) return "UNLINKED";
     const goals = s.goals.map((k) => snap.goals.find((g) => g.key === k)).filter(Boolean);
@@ -399,7 +400,31 @@
               <label class="hint"><input type="checkbox" data-sconf="${i}" ${s.confirmed ? "checked" : ""}> ${t("تمت المراجعة", "Reviewed")}</label>
               <input class="input sm grow" data-sk="${i}.comment" value="${esc(s.comment || "")}" placeholder="${t("تعليق المدقق", "Auditor comment")}"></div></div>`;
         }).join("")}
+        <button class="btn primary" id="impS" ${a.therapist ? "" : "disabled"}>⬇ ${t("استيراد ملاحظات الجلسات (SOAP) لهذا الشهر", "Import this month's SOAP notes")}</button>
         <button class="btn" id="addS" ${filePlans.length ? "" : "disabled"}>+ ${t("إضافة جلسة مراجعة", "Add reviewed session")}</button> ${filePlans.length ? "" : `<span class="hint">${t("اختر ملفات وخططاً أولاً.", "Select files and plans first.")}</span>`}`;
+      const imp = $("#impS"); if (imp) imp.onclick = async () => {
+        imp.disabled = true;
+        try {
+          const notes = await pb.collection("soap_notes").getFullList({ filter: pb.filter("therapist = {:t} && date >= {:a} && date <= {:b}", { t: a.therapist, a: monthStart(), b: monthEnd() }), sort: "date" });
+          const onlyFiles = a.files.length ? notes.filter((n) => a.files.includes(n.patient)) : notes;
+          let added = 0;
+          onlyFiles.forEach((n) => {
+            if (a.sessions.some((s) => s.soap === n.id)) return;
+            if (!a.files.includes(n.patient)) a.files.push(n.patient);
+            const pl = n.plan && plById(n.plan);
+            if (pl && !a.plans.includes(pl.id)) { a.plans.push(pl.id); snapPlan(pl); }
+            const gs = (n.goals || []).filter((g) => !g.custom);
+            const absent = n.attendance !== "attended";
+            a.sessions.push({ id: uid(), soap: n.id, plan: pl ? pl.id : "", date: n.date, goals: gs.map((g) => g.key), extra: (n.goals || []).some((g) => g.custom),
+              perf: absent ? "" : ((n.goals || []).every((g) => g.acc !== "" && g.acc != null) ? "yes" : "no"), prompt: absent ? "" : ((n.goals || []).every((g) => g.prompt) ? "yes" : "no"),
+              text: [n.note, n.text].filter(Boolean).join("\n"), status: "", confirmed: false, comment: absent ? t("جلسة غياب / إلغاء", "Absent / cancelled session") : "" });
+            added++;
+          });
+          dirty(); renderFiles(); renderSess(); renderCov(); renderRes();
+          A.toast(added ? t(`تم استيراد ${added} ملاحظة جلسة. راجع كل جلسة واعتمدها.`, `Imported ${added} session notes. Review and confirm each.`) : t("لا توجد ملاحظات جلسات جديدة لهذا الأخصائي في هذا الشهر.", "No new session notes for this therapist and month."), !added);
+        } catch (err) { A.toast(A.errText(err), true); }
+        imp.disabled = false;
+      };
       const add = $("#addS"); if (add) add.onclick = () => { a.sessions.push({ id: uid(), plan: filePlans[0] || "", date: "", goals: [], perf: "", prompt: "", text: "", status: "", confirmed: false, comment: "" }); dirty(); renderSess(); renderCov(); renderRes(); };
     }
     function renderCov() {
