@@ -192,7 +192,8 @@
       ["#/", "الرئيسية", "home"],
       ["#/patients", "المرضى", "patients"],
       ["#/forms", "النماذج", "forms"],
-      ...(isAdmin() ? [["#/docs", "آخر المستندات", "docs"], ["#/users", "المستخدمون", "users"], ["#/audit", "سجل الحركات", "audit"], ["#/settings", "الإعدادات", "settings"]] : []),
+      ...(isAdmin() ? [["#/docs", "آخر المستندات", "docs"], ["#/quality", "الجودة والتدقيق", "quality"], ["#/users", "المستخدمون", "users"], ["#/audit", "سجل الحركات", "audit"], ["#/settings", "الإعدادات", "settings"]] : []),
+      ...(isTherapist() ? [["#/quality/me", "نتائج التدقيق", "quality"]] : []),
       ["#/me", "ملفي", "me"],
     ];
     const centerOpts = [`<option value="">كل المراكز</option>`, ...S.centers.map((c) => `<option value="${c.id}" ${S.centerFilter === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`)].join("");
@@ -281,6 +282,7 @@
       if (h[0] === "import" && (isAdmin() || S.me.role === "reception")) return pageImport();
       if (h[0] === "audit" && isAdmin()) return await pageAudit();
       if (h[0] === "settings" && isAdmin()) return await pageSettings();
+      if (h[0] === "quality" && window.QA && (isAdmin() || isTherapist())) { sandbox = false; return await window.QA.route(h.slice(1)); }
       shell("", `<div class="panel empty">الصفحة غير موجودة.</div>`);
     } catch (err) {
       if (err && err.status === 401) { pb.authStore.clear(); return renderLogin("انتهت الجلسة، الرجاء تسجيل الدخول مجدداً."); }
@@ -1141,12 +1143,21 @@
       <div class="field"><label class="f">الحالة</label><select class="input" name="active"><option value="1" ${u.active ? "selected" : ""}>مفعّل</option><option value="0" ${!u.active ? "selected" : ""}>موقوف</option></select></div>
       <div class="field"><label class="f">${isNew ? "كلمة المرور" : "كلمة مرور جديدة (اتركها فارغة لعدم التغيير)"}</label><input class="input" name="password" type="password" autocomplete="new-password" minlength="8"></div>
     </div>
+    <details class="field" ${u.employee_id || u.job_title ? "open" : ""}><summary class="f" style="cursor:pointer">بيانات الملف الوظيفي (لصفحة الأداء والتدقيق)</summary><div class="grid cols-2" style="margin-top:8px">
+      <div class="field"><label class="f">الرقم الوظيفي</label><input class="input mono" name="employee_id" value="${esc(u.employee_id)}"></div>
+      <div class="field"><label class="f">المسمى الوظيفي</label><input class="input" name="job_title" value="${esc(u.job_title)}"></div>
+      <div class="field"><label class="f">القسم</label><input class="input" name="department" value="${esc(u.department || "النطق واللغة")}"></div>
+      <div class="field"><label class="f">تاريخ الالتحاق</label><input class="input" type="date" name="join_date" value="${esc(String(u.join_date || "").slice(0, 10))}"></div>
+      <div class="field"><label class="f">المشرف المسؤول</label><input class="input" name="supervisor_name" value="${esc(u.supervisor_name)}"></div>
+      <div class="field"><label class="f">الحالة الوظيفية</label><input class="input" name="employment_status" value="${esc(u.employment_status || "على رأس العمل")}"></div>
+    </div></details>
     <div class="field"><label class="f">المراكز</label><div class="chips" id="uc">${S.centers.map((c) => `<button type="button" class="chip ${(u.centers || []).includes(c.id) ? "on" : ""}" data-id="${c.id}">${esc(c.name_ar)}</button>`).join("")}</div></div>
     <p class="hint">كلمة المرور 8 أحرف على الأقل. أعطها للموظف شخصياً واطلب منه تغييرها.</p>
     ${isNew ? '<p class="note-box">بعد حفظ المستخدم، افتحه مرة ثانية (تعديل) لرفع توقيعه أو ختمه.</p>' : `<div class="field"><label class="f">التوقيع والختم (يظهران في التقارير والخطط)</label><div id="sigBox"></div></div>`}`, {
       onOk: async (root) => {
         const data = { name: val(root, "name"), name_en: val(root, "name_en"), username: val(root, "username").toLowerCase(), email: val(root, "email"), role: val(root, "role"), active: val(root, "active") === "1",
-          centers: [...root.querySelectorAll("#uc .chip.on")].map((c) => c.dataset.id), emailVisibility: true };
+          centers: [...root.querySelectorAll("#uc .chip.on")].map((c) => c.dataset.id), emailVisibility: true,
+          employee_id: val(root, "employee_id"), job_title: val(root, "job_title"), department: val(root, "department"), join_date: val(root, "join_date"), supervisor_name: val(root, "supervisor_name"), employment_status: val(root, "employment_status") };
         const pw = root.querySelector('[name="password"]').value;
         if (isNew && pw.length < 8) { toast("كلمة المرور 8 أحرف على الأقل", true); return false; }
         if (pw) { data.password = pw; data.passwordConfirm = pw; }
@@ -1628,6 +1639,13 @@
     };
   }
   window.__changeServer = () => { try { localStorage.removeItem(API_KEY); sessionStorage.removeItem(API_KEY); } catch (_) {} pb.authStore.clear(); window.__forceConnect = true; renderConnect(); };
+
+  // ------------------------------------------------------------------ helpers shared with quality.js (documentation audits)
+  window.APPX = {
+    get S() { return S; }, pb, UI, esc, toast, modal, shell, go, qs, errText, today, d10, toPb, addMonths, addDays, isAdmin, isTherapist,
+    centerById, shortCenter, exportDoc, statusPill, route: () => route(),
+    setDirty: (v) => { dirty = !!v; }, isDirty: () => dirty,
+  };
 
   // ------------------------------------------------------------------ boot
   (async function boot() {

@@ -149,6 +149,7 @@
     setSignature(params) { return this.authed({ action: "setSignature", ...params }); }
 
     importPatients(params) { return this.authed({ action: "importPatients", ...params }); }
+    qaStats(params) { return this.authed({ action: "qaStats", ...(params || {}) }); }
 
     async send(path) {
       if (/send-reminders/.test(path)) return this.authed({ action: "sendReminders" });

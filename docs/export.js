@@ -15,6 +15,7 @@
 //         info4 = label | value | label | value, labels shaded blue (plan / initial header)
 //         grid2 = 2 cells per row, label bold (oral-facial table)
 //    | a | b | c |          table; first row = header (shaded)
+//    ::bars                 "label: number (0-100)" lines until a blank line -> horizontal bar chart (audit history)
 //    ::box                  shaded light paragraph(s) until a blank line (used for the parents' intro)
 //    ### {g} / {a} / {b} text  coloured sub-heading: green / amber / blue-grey (initial scanning lists)
 //    [[SIG]]                the therapist's signature + stamp images (from his profile); blank if none
@@ -42,6 +43,11 @@
           i++;
         }
         blocks.push({ t: m[1], rows }); continue;
+      }
+      if (t === "::bars") {
+        const rows = []; i++;
+        while (i < src.length && src[i].trim()) { const x = src[i].trim(), k = x.lastIndexOf(":"); rows.push([x.slice(0, k).trim(), Number(x.slice(k + 1)) || 0]); i++; }
+        blocks.push({ t: "bars", rows }); continue;
       }
       if (t === "::box") {
         const paras = []; i++;
@@ -116,6 +122,7 @@
         case "title": return `<h1>${inlineHtml(b.text)}</h1>`;
         case "h2": return `<h2>${inlineHtml(b.text)}</h2>`;
         case "h3": return b.color ? `<h3 class="tone" style="color:#${b.color}">${inlineHtml(b.text)}</h3>` : `<h3>${inlineHtml(b.text)}</h3>`;
+        case "bars": return `<table class="bars">${b.rows.map(([l, v]) => `<tr><td class="bl">${esc(l)}</td><td><div class="bw"><div class="bf" style="width:${Math.max(0, Math.min(100, v))}%"></div></div></td><td class="bv">${esc(String(v))}%</td></tr>`).join("")}</table>`;
         case "box": return `<div class="box">${b.paras.map((x) => `<p>${inlineHtml(x)}</p>`).join("")}</div>`;
         case "h4": return `<h4>${inlineHtml(b.text)}</h4>`;
         case "center": return `<p class="center"><b>${inlineHtml(b.text)}</b></p>`;
@@ -157,6 +164,10 @@
   h2 { font-size: 13pt; margin: 14px 0 4px; page-break-after: avoid; }
   h3 { font-size: 12pt; margin: 10px 0 3px; text-decoration: underline; page-break-after: avoid; }
   h3.tone { text-decoration: none; }
+  table.bars td { border: 0; padding: 3px 6px; vertical-align: middle; }
+  table.bars td.bl { width: 22%; white-space: nowrap; } table.bars td.bv { width: 10%; font-weight: bold; }
+  .bw { background: #EEF0F2; height: 14px; border-radius: 7px; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bf { background: #2F7D4A; height: 100%; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .box { background: #${BOX_FILL}; border-radius: 6px; padding: 8px 12px; margin: 6px 0 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .box p:last-child { margin-bottom: 0; }
   h4 { font-size: 12pt; margin: 8px 18px 3px; text-decoration: underline; page-break-after: avoid; }
@@ -245,6 +256,19 @@ ${body}
         case "title": kids.push(P(b.text, { bold: true, size: 30, align: d.AlignmentType.CENTER, after: 160 })); break;
         case "h2": kids.push(P(b.text, { bold: true, size: 26, before: 200, after: 60, keepNext: true })); break;
         case "h3": kids.push(P(b.text, { bold: true, underline: !b.color, color: b.color, before: 120, after: 40, keepNext: true })); break;
+        case "bars": {
+          const NB = { style: d.BorderStyle.NONE, size: 0, color: "FFFFFF" }, nb = { top: NB, bottom: NB, left: NB, right: NB };
+          const cellN = (children, w) => new d.TableCell({ borders: nb, width: { size: w, type: d.WidthType.PERCENTAGE }, children });
+          const rows = b.rows.map(([l, v]) => {
+            const n = Math.round(Math.max(0, Math.min(100, v)) / 4);
+            return new d.TableRow({ children: [
+              cellN([P(l, { size: 20, after: 0 })], 22),
+              cellN([new d.Paragraph({ children: [new d.TextRun({ text: "█".repeat(n) || " ", color: "2F7D4A", size: 18, font: "Arial" }), new d.TextRun({ text: "█".repeat(25 - n), color: "E3E7EA", size: 18, font: "Arial" })] })], 66),
+              cellN([P(v + "%", { size: 20, bold: true, after: 0 })], 12),
+            ] });
+          });
+          kids.push(new d.Table({ width: { size: 100, type: d.WidthType.PERCENTAGE }, visuallyRightToLeft: rtl, rows }), P("", { after: 60 })); break;
+        }
         case "box": b.paras.forEach((x, k) => kids.push(new d.Paragraph({ bidirectional: rtl, alignment: d.AlignmentType.JUSTIFIED,
           spacing: { before: k ? 0 : 80, after: k === b.paras.length - 1 ? 160 : 60, line: 276 },
           shading: { fill: BOX_FILL, type: d.ShadingType.CLEAR, color: "auto" }, children: runs(x) }))); break;
