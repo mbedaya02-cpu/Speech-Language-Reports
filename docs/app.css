@@ -292,3 +292,6 @@ table.t.mini td { padding: 4px 6px; font-size: 13px; }
 .soap-goal { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #fbfcfd; }
 .soap-goal-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
 .soap-pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; font-family: inherit; font-size: 14px; }
+.pi-block { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+.pi-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.pi-row .input { flex: 1; width: auto; }

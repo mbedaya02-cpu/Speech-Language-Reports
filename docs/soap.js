@@ -122,7 +122,7 @@
           <div class="q"><div class="q-label">حالة ${patient.gender === "أنثى" ? "الطفلة" : "الطفل"} في الجلسة <span class="tag">اختيار متعدد</span></div>${chips("mood", MOOD, n.mood, true)}</div>
           <div class="q"><div class="q-label">ما ذكره الأهل</div>${chips("parent", PARENT, n.parent)}<input class="input" data-f="parent_note" value="${esc(n.parent_note || "")}" placeholder="تفاصيل (اختياري)" style="margin-top:6px"></div></div></div>
         <div class="panel"><div class="panel-head"><h2 class="grow"><span class="n">O</span>الأهداف التي عملت عليها اليوم (Objective)</h2></div><div class="panel-body">
-          ${pl && pl.uploaded ? `<div class="note-box">هذه الخطة مرفوعة كملف، فأهدافها غير متاحة للاختيار. أضف الأهداف كتابةً بالأسفل.</div>` : ""}
+          ${pl && pl.uploaded && !goals.length ? `<div class="note-box">ما انقرأت أهداف هذه الخطة المرفوعة. افتح الخطة واضغط «قراءة الأهداف من ملف Word»، أو أضف الأهداف كتابةً بالأسفل.</div>` : ""}
           ${goals.length ? `<div class="q-label">اختر الأهداف قصيرة المدى (STGs) من الخطة:</div><div class="soap-goals">${goals.map((g, gi) => {
             const on = (n.goals || []).some((x) => x.key === g.key);
             return `<label class="soap-g ${on ? "on" : ""}"><input type="checkbox" data-goal="${esc(g.key)}" ${on ? "checked" : ""}> <strong>STG ${gi + 1}</strong> ${esc(g.text)}${g.eval === "achieved" ? ' <span class="pill ok">أُنجز</span>' : ""}</label>`; }).join("")}</div>` : (pl ? "" : `<div class="hint">لا توجد خطة سارية لهذا الطفل. اختر خطة أو أضف الهدف كتابةً.</div>`)}

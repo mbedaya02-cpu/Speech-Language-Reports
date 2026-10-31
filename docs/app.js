@@ -568,6 +568,7 @@
       <div class="field"><label class="f">حالة الخطة</label><select class="input" name="status">${PLAN_STATUS.map((t) => `<option ${rec.status === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
       <div class="field"><label class="f">تاريخ البداية *</label><input class="input" type="date" name="start_date" value="${d10(rec.start_date)}"></div>
       <div class="field"><label class="f">تاريخ الانتهاء / إعادة التقييم *</label><input class="input" type="date" name="end_date" value="${d10(rec.end_date)}"></div></div>
+      ${isNew ? `<div class="field"><label class="f">أهداف الخطة</label><div id="piBox" class="hint">اختر ملف Word (.docx) بنفس نموذج الموقع، وبتنقرأ الأهداف لحالها.</div></div>` : ""}
       <p class="hint">الخطة المرفوعة تُحفظ في ملف الطفل، ويصل تذكير تجديدها قبل تاريخ الانتهاء متل باقي الخطط.</p>`, {
       okText: isNew ? "رفع وحفظ" : "حفظ",
       onOk: async (root) => {
@@ -578,11 +579,28 @@
         if (!data.therapist) { toast("اختر اسم الأخصائي من معالجي هذا المركز.", true); return false; }
         if (!data.start_date || !data.end_date) { toast("حدد تاريخ البداية والانتهاء", true); return false; }
         if (f) data["files+"] = [f];
+        if (isNew && parsed && parsed.ok) { const blocks = window.PlanImport.clean(parsed.blocks); if (blocks.length) data.plan_data = { blocks, imported: true }; }
         if (isNew) await pb.collection("plans").create(data); else await pb.collection("plans").update(rec.id, data);
         toast(isNew ? "تم رفع الخطة إلى ملف الطفل ✓" : "تم الحفظ ✓"); route();
       },
     });
     m.querySelector('[name="center"]').onchange = (e) => { m.querySelector("#thBox").innerHTML = thChooserHtml(e.target.value, ""); };
+    // read the goals (and dates) out of a Word plan
+    let parsed = null;
+    const fi = m.querySelector('[name="file"]');
+    if (fi && window.PlanImport) fi.onchange = async () => {
+      const box = m.querySelector("#piBox"), f = fi.files[0]; parsed = null;
+      if (!f) return;
+      box.textContent = "جاري قراءة الأهداف من الملف…";
+      parsed = await window.PlanImport.parse(f);
+      if (!parsed.ok) { box.innerHTML = `<div class="note-box">${esc(window.PlanImport.REASON[parsed.reason] || "")}</div>`; return; }
+      const inf = parsed.info, warn = [];
+      if (inf.start) m.querySelector('[name="start_date"]').value = inf.start;
+      if (inf.end) m.querySelector('[name="end_date"]').value = inf.end;
+      if (inf.file_no && String(inf.file_no).trim() !== String(p.file_no).trim()) warn.push(`⚠ رقم الملف داخل الخطة (${inf.file_no}) لا يطابق ملف هذا الطفل (${p.file_no}). تأكد إنك رافع الخطة الصحيحة.`);
+      box.innerHTML = (warn.length ? `<div class="note-box" style="margin-bottom:8px;color:#a15c07">${esc(warn.join(" "))}</div>` : "") + (inf.start || inf.end ? `<div class="hint">تمت قراءة التواريخ من الملف.</div>` : "") + `<div id="piList"></div>`;
+      window.PlanImport.review(box.querySelector("#piList"), parsed.blocks, esc);
+    };
   }
 
   // an uploaded plan opens as its details + file(s) instead of the plan editor
@@ -593,11 +611,33 @@
       <div class="panel"><div class="panel-body"><div class="grid cols-4">
         <div><div class="hint">المركز</div>${centerTag(rec.center)}</div><div><div class="hint">الفترة</div>${d10(rec.start_date)} ← ${d10(rec.end_date)}</div>
         <div><div class="hint">الأخصائي</div>${esc(rec.expand && rec.expand.therapist ? rec.expand.therapist.name : "")}</div><div><div class="hint">الحالة</div>${esc(rec.status)}</div></div>
+        <div style="margin-top:14px"><div class="hint"><strong>أهداف الخطة (تظهر للاختيار في ملاحظات الجلسات):</strong></div>
+          ${((rec.plan_data || {}).blocks || []).length ? `<ol style="margin:6px 0">${window.Forms.plan.allGoals(rec.plan_data, "ar", FC.personCtx(patient, "ar")).map((g) => `<li>${esc(g.text)}</li>`).join("")}</ol>` : `<div class="hint">لا توجد أهداف مقروءة لهذه الخطة.</div>`}
+          ${canClinical() && (rec.files || []).some((f) => /\.docx$/i.test(f)) ? `<button class="btn sm" id="reread">⟳ قراءة الأهداف من ملف Word</button>` : ""}<div id="piBox2" style="margin-top:8px"></div></div>
         <div style="margin-top:14px" id="fb">${filesBlock(rec, "plans")}</div>
         ${canClinical() ? `<div class="btn-row" style="margin-top:12px"><button class="btn" id="edU">تعديل البيانات</button><button class="btn primary" id="svF">حفظ المرفقات</button>${isAdmin() ? `<button class="btn danger" id="delU">حذف</button>` : ""}</div>` : ""}</div></div>`;
     const st = {};
     bindFiles(main, rec, "plans", st);
     const ed = main.querySelector("#edU"); if (ed) ed.onclick = () => uploadPlanModal(patient, rec);
+    const rr = main.querySelector("#reread"); if (rr) rr.onclick = async () => {
+      const name = rec.files.find((f) => /\.docx$/i.test(f));
+      rr.disabled = true;
+      try {
+        const r = await pb.call({ action: "fileData", token: pb.authStore.token, collection: "plans", id: rec.id, name });
+        const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+        const res = await window.PlanImport.parse(new File([bytes], r.name || "plan.docx"));
+        const box = main.querySelector("#piBox2");
+        if (!res.ok) { box.innerHTML = `<div class="note-box">${esc(window.PlanImport.REASON[res.reason] || "")}</div>`; rr.disabled = false; return; }
+        box.innerHTML = `<div id="piList"></div><button class="btn sm primary" id="piSave" style="margin-top:6px">حفظ الأهداف</button>`;
+        window.PlanImport.review(box.querySelector("#piList"), res.blocks, esc);
+        box.querySelector("#piSave").onclick = async () => {
+          const blocks = window.PlanImport.clean(res.blocks);
+          if (!blocks.length) { toast("ما في أهداف للحفظ.", true); return; }
+          try { await pb.collection("plans").update(rec.id, { therapist: rec.therapist, center: rec.center, plan_data: { blocks, imported: true } }); toast("تم حفظ أهداف الخطة ✓"); route(); } catch (e) { toast(errText(e), true); }
+        };
+      } catch (e) { toast(errText(e), true); }
+      rr.disabled = false;
+    };
     const sv = main.querySelector("#svF"); if (sv) sv.onclick = async () => {
       try { await pb.collection("plans").update(rec.id, filePayload(main, st, { therapist: rec.therapist, center: rec.center })); dirty = false; toast("تم الحفظ ✓"); route(); } catch (e) { toast(errText(e), true); }
     };
