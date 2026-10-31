@@ -86,6 +86,8 @@
     return `<span class="pill ${map[s] || ""}">${esc(s || "—")}</span>`;
   }
   const centerById = (id) => S.centers.find((c) => c.id === id);
+  // therapists are classified by center (users.centers)
+  const inCenterOf = (u, centerId) => !!(u && centerId && (u.centers || []).includes(centerId));
   function centerTag(id) {
     const c = centerById(id);
     if (!c) return "";
@@ -472,7 +474,7 @@
       return `<tr><td><a href="#/plan/${r.id}"><strong>${esc(r.plan_type)}</strong></a></td><td class="nowrap">${d10(r.start_date)} ← ${d10(r.end_date)}</td>
         <td>${statusPill(r.status)} ${r.status === "سارية" && dl <= 30 ? duePill(dl) : ""}</td><td>${centerTag(r.center)}</td>
         <td>${esc(r.expand && r.expand.therapist ? r.expand.therapist.name : "")}</td>
-        <td class="nowrap"><div class="btn-row">${docButtons("plan", r)}${r.status === "سارية" && canClinical() ? `<a class="btn sm" href="#/plan/new?patient=${p.id}&renew=${r.id}">تجديد</a>` : ""}</div></td></tr>`;
+        <td class="nowrap"><div class="btn-row">${r.uploaded ? (r.files || []).slice(0, 1).map((f) => `<button class="btn sm" data-upfile="${r.id}" data-name="${esc(f)}">📎 فتح الملف</button>`).join("") : docButtons("plan", r)}${r.status === "سارية" && canClinical() ? `<a class="btn sm" href="#/plan/new?patient=${p.id}&renew=${r.id}">تجديد</a>` : ""}</div></td></tr>`;
     }).join("");
     const reportRows = reports.map((r) => `<tr><td><a href="#/report/${r.id}"><strong>${esc(r.report_type)}</strong></a></td><td class="nowrap">${d10(r.report_date)}</td>
         <td>${statusPill(r.status)}</td><td class="nowrap">${r.next_due ? (r.followed_up ? `<span class="pill info">تمت المتابعة</span>` : `${d10(r.next_due)} ${duePill(daysLeft(r.next_due))}`) : "—"}</td>
@@ -488,7 +490,7 @@
       <div class="panel">
         <div class="tabs"><button data-tab="plans" class="${tab === "plans" ? "on" : ""}">الخطط العلاجية (${plans.length})</button><button data-tab="reports" class="${tab === "reports" ? "on" : ""}">التقارير (${reports.length})</button></div>
         <div data-pane="plans" class="${tab === "plans" ? "" : "hidden"}">
-          <div class="panel-head"><span class="grow muted">الخطة التربوية الفردية للنطق واللغة</span>${canClinical() ? `<a class="btn primary" href="#/plan/new?patient=${p.id}">+ خطة جديدة</a>` : ""}</div>
+          <div class="panel-head"><span class="grow muted">الخطة التربوية الفردية للنطق واللغة</span>${canClinical() ? `<button class="btn" id="upPlan">⬆ رفع خطة جاهزة (ملف)</button> <a class="btn primary" href="#/plan/new?patient=${p.id}">+ خطة جديدة</a>` : ""}</div>
           ${plans.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>الفترة</th><th>الحالة</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${planRows}</tbody></table></div>` : `<div class="empty">لا توجد خطط بعد.</div>`}
         </div>
         <div data-pane="reports" class="${tab === "reports" ? "" : "hidden"}">
@@ -507,6 +509,12 @@
       if (!confirm(`حذف ملف ${p.full_name} نهائياً مع كل خططه وتقاريره؟ لا يمكن التراجع.`)) return;
       try { await pb.collection("patients").delete(p.id); toast("تم الحذف"); go("#/patients"); } catch (e) { toast(errText(e), true); }
     };
+    main.querySelectorAll("[data-upfile]").forEach((b) => b.onclick = async () => {
+      const r = plans.find((x) => x.id === b.dataset.upfile);
+      try { toast("جاري فتح الملف…"); await pb.files.download(r, b.dataset.name); } catch (err) { toast(errText(err), true); }
+    });
+    const up = main.querySelector("#upPlan");
+    if (up) up.onclick = () => uploadPlanModal(p);
     const nr = main.querySelector("#newR");
     if (nr) nr.onclick = () => modal("نوع التقرير", `<div id="types" class="bank" style="max-height:none">${REPORT_TYPES.map((t) => `<button class="chip" data-t="${esc(t)}" style="text-align:start"><strong>${esc(t)}</strong><div class="hint">${esc(REPORT_HINT[t])}</div></button>`).join("")}</div>`, {})
       .querySelector("#types").addEventListener("click", (e) => {
@@ -520,10 +528,70 @@
   function docButtons(kind, r) {
     return `<button class="btn sm" data-doc="${kind}:${r.id}:docx" title="تنزيل Word">Word</button><button class="btn sm" data-doc="${kind}:${r.id}:pdf" title="طباعة / حفظ PDF">PDF</button>`;
   }
+  // ----- therapist chooser used by the "upload a ready plan" form (same center rule as the editor)
+  function thChooserHtml(centerId, cur) {
+    const list = (S.therapists || []).filter((t) => inCenterOf(t, centerId));
+    if (!isAdmin() && inCenterOf(S.me, centerId)) return `<div class="input" style="background:#f6f6f6">${esc(S.me.name)}</div><input type="hidden" name="therapist" value="${S.me.id}">`;
+    const def = cur && list.some((t) => t.id === cur) ? cur : (isAdmin() ? S.me.id : "");
+    return `<select class="input" name="therapist"><option value="">— اختر أخصائياً من معالجي هذا المركز —</option>${isAdmin() && !list.some((t) => t.id === S.me.id) ? `<option value="${S.me.id}" ${def === S.me.id ? "selected" : ""}>${esc(S.me.name)}</option>` : ""}${list.map((t) => `<option value="${t.id}" ${t.id === def ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+      ${!isAdmin() ? `<div class="hint" style="color:#a15c07">أنت غير مصنّف على هذا المركز، فالخطة لازم تكون باسم أحد معالجيه.</div>` : ""}`;
+  }
+
+  // ----- upload a ready-made plan (PDF / Word / image) into the child's file
+  function uploadPlanModal(p, rec) {
+    const isNew = !rec; rec = rec || { center: p.center, status: "سارية", start_date: toPb(today()), end_date: toPb(addMonths(today(), 6)), plan_type: "الخطة التربوية الفردية" };
+    const m = modal(isNew ? "رفع خطة علاجية جاهزة" : "بيانات الخطة المرفوعة", `<div class="grid cols-2">
+      ${isNew ? `<div class="field" style="grid-column:span 2"><label class="f">ملف الخطة (PDF / Word / صورة) *</label><input class="input" type="file" name="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"></div>` : ""}
+      <div class="field"><label class="f">المركز</label><select class="input" name="center">${S.centers.map((c) => `<option value="${c.id}" ${rec.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">الأخصائي/ة</label><div id="thBox">${thChooserHtml(rec.center, rec.therapist)}</div></div>
+      <div class="field"><label class="f">نوع الخطة</label><input class="input" name="plan_type" value="${esc(rec.plan_type)}"></div>
+      <div class="field"><label class="f">حالة الخطة</label><select class="input" name="status">${PLAN_STATUS.map((t) => `<option ${rec.status === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">تاريخ البداية *</label><input class="input" type="date" name="start_date" value="${d10(rec.start_date)}"></div>
+      <div class="field"><label class="f">تاريخ الانتهاء / إعادة التقييم *</label><input class="input" type="date" name="end_date" value="${d10(rec.end_date)}"></div></div>
+      <p class="hint">الخطة المرفوعة تُحفظ في ملف الطفل، ويصل تذكير تجديدها قبل تاريخ الانتهاء متل باقي الخطط.</p>`, {
+      okText: isNew ? "رفع وحفظ" : "حفظ",
+      onOk: async (root) => {
+        const f = isNew ? root.querySelector('[name="file"]').files[0] : null;
+        const data = { patient: p.id, center: val(root, "center"), therapist: val(root, "therapist"), plan_type: val(root, "plan_type") || "الخطة التربوية الفردية", status: val(root, "status"),
+          start_date: toPb(val(root, "start_date")), end_date: toPb(val(root, "end_date")), uploaded: true };
+        if (isNew && !f) { toast("اختر ملف الخطة", true); return false; }
+        if (!data.therapist) { toast("اختر اسم الأخصائي من معالجي هذا المركز.", true); return false; }
+        if (!data.start_date || !data.end_date) { toast("حدد تاريخ البداية والانتهاء", true); return false; }
+        if (f) data["files+"] = [f];
+        if (isNew) await pb.collection("plans").create(data); else await pb.collection("plans").update(rec.id, data);
+        toast(isNew ? "تم رفع الخطة إلى ملف الطفل ✓" : "تم الحفظ ✓"); route();
+      },
+    });
+    m.querySelector('[name="center"]').onchange = (e) => { m.querySelector("#thBox").innerHTML = thChooserHtml(e.target.value, ""); };
+  }
+
+  // an uploaded plan opens as its details + file(s) instead of the plan editor
+  function pageUploadedPlan(rec, patient) {
+    const main = shell("patients", "");
+    main.innerHTML = `<div class="crumbs"><a href="#/patients">المرضى</a> / <a href="#/patient/${patient.id}?tab=plans">${esc(patient.full_name)}</a> / خطة مرفوعة</div>
+      <div class="page-head"><h1 class="grow">${esc(rec.plan_type)} — ${esc(patient.full_name)}</h1>${statusPill(rec.status)}<span class="pill info">ملف مرفوع</span></div>
+      <div class="panel"><div class="panel-body"><div class="grid cols-4">
+        <div><div class="hint">المركز</div>${centerTag(rec.center)}</div><div><div class="hint">الفترة</div>${d10(rec.start_date)} ← ${d10(rec.end_date)}</div>
+        <div><div class="hint">الأخصائي</div>${esc(rec.expand && rec.expand.therapist ? rec.expand.therapist.name : "")}</div><div><div class="hint">الحالة</div>${esc(rec.status)}</div></div>
+        <div style="margin-top:14px" id="fb">${filesBlock(rec, "plans")}</div>
+        ${canClinical() ? `<div class="btn-row" style="margin-top:12px"><button class="btn" id="edU">تعديل البيانات</button><button class="btn primary" id="svF">حفظ المرفقات</button>${isAdmin() ? `<button class="btn danger" id="delU">حذف</button>` : ""}</div>` : ""}</div></div>`;
+    const st = {};
+    bindFiles(main, rec, "plans", st);
+    const ed = main.querySelector("#edU"); if (ed) ed.onclick = () => uploadPlanModal(patient, rec);
+    const sv = main.querySelector("#svF"); if (sv) sv.onclick = async () => {
+      try { await pb.collection("plans").update(rec.id, filePayload(main, st, { therapist: rec.therapist, center: rec.center })); dirty = false; toast("تم الحفظ ✓"); route(); } catch (e) { toast(errText(e), true); }
+    };
+    const del = main.querySelector("#delU"); if (del) del.onclick = async () => {
+      if (!confirm("حذف هذه الخطة المرفوعة نهائياً؟")) return;
+      await pb.collection("plans").delete(rec.id); toast("تم الحذف"); go(`#/patient/${patient.id}?tab=plans`);
+    };
+  }
+
   function bindDocButtons(root, { plans, reports, patient }) {
     root.querySelectorAll("[data-doc]").forEach((b) => b.onclick = async () => {
       const [kind, id, fmt] = b.dataset.doc.split(":");
       const r = (kind === "plan" ? plans : reports).find((x) => x.id === id);
+      if (r.uploaded && (r.files || []).length) { try { await pb.files.download(r, r.files[0]); } catch (e) { toast(errText(e), true); } return; }
       const text = kind === "plan" ? r.plan_text : r.report_text;
       if (!text) { toast("لم يتم توليد نص بعد. افتح المستند واضغط «توليد النص» ثم احفظ.", true); return; }
       const lang = (kind === "plan" ? r.plan_lang : r.report_lang) || "ar";
@@ -611,6 +679,7 @@
     } else {
       rec = await pb.collection(coll).getOne(id, { expand: "therapist" });
       patient = await pb.collection("patients").getOne(rec.patient);
+      if (isPlan && rec.uploaded) return pageUploadedPlan(rec, patient);
     }
     const kind = isPlan ? "plan" : KIND[rec.report_type] || "external";
     const form = window.Forms[kind];
@@ -692,13 +761,14 @@
         <div class="field"><label class="f">حالة الخطة</label><select class="input" data-path="status">${PLAN_STATUS.map((t) => `<option ${rec.status === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
         <div class="field"><label class="f">تاريخ بدء الخطة</label><input class="input" type="date" id="sd" value="${d10(rec.start_date)}"></div>
         <div class="field"><label class="f">تاريخ انتهاء الخطة / إعادة التقييم</label><input class="input" type="date" id="ed" value="${d10(rec.end_date)}"><div class="hint">يُحسب تلقائياً من مدة الخطة ويمكن تعديله.</div></div>
-        <div class="field"><label class="f">عدد الجلسات الموافق عليها (تأمين)</label><input class="input" type="number" min="0" data-path="sessions_approved" value="${esc(rec.sessions_approved ?? "")}"></div>`
+        <div class="field"><label class="f">عدد الجلسات الموافق عليها (تأمين)</label><input class="input" type="number" min="0" data-path="sessions_approved" value="${esc(rec.sessions_approved ?? "")}"></div>
+        <div class="field" id="thField"></div>`
       : `
         <div class="field"><label class="f">المركز (الترويسة)</label><select class="input" data-path="center">${S.centers.map((c) => `<option value="${c.id}" ${rec.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
         <div class="field"><label class="f">${esc(form.dateLabel ? tx(form.dateLabel) : "تاريخ التقرير")}</label><input class="input" type="date" id="rd" value="${d10(rec.report_date)}"></div>
         <div class="field"><label class="f">حالة التقرير</label><select class="input" data-path="status">${["مسودة", "نهائي"].map((t) => `<option ${rec.status === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
         ${form.noNextDue ? "" : `<div class="field"><label class="f">موعد التقرير التالي (للتذكير)</label><input class="input" type="date" id="nd" value="${d10(rec.next_due)}"><div class="hint">فارغ = لا يوجد تقرير لاحق. الافتراضي بعد 6 أشهر.</div></div>`}
-        ${isAdmin() && !sb ? `<div class="field"><label class="f">الأخصائي/ة</label><select class="input" id="thSel"></select><div class="hint">القائمة حسب المركز المختار.</div></div>` : `<div class="field"><label class="f">الأخصائي/ة</label><div class="input" style="background:var(--bg-soft,#f6f6f6)">${esc(((rec.expand && rec.expand.therapist) || S.me).name || "")}</div></div>`}
+        <div class="field" id="thField"></div>
         ${form.usesPlan ? `<div class="field" style="grid-column: span 2"><label class="f">الخطة المرتبطة</label>${plans.length ? `<select class="input" id="planSel">${plans.map((p) => `<option value="${p.id}" ${p.id === rec.plan ? "selected" : ""}>${esc(p.plan_type)}: ${d10(p.start_date)} ← ${d10(p.end_date)} (${esc(p.status)})</option>`).join("")}</select>` : `<div class="note-box">لا توجد خطة محفوظة لهذا المريض.</div>`}</div>` : ""}`;
 
     const main = shell(sb ? "forms" : "patients", "");
@@ -912,21 +982,36 @@
       main.querySelector("#rd").oninput = (e) => { rec.report_date = toPb(e.target.value); dirty = true; };
       const ndEl = main.querySelector("#nd");
       if (ndEl) ndEl.oninput = (e) => { rec.next_due = toPb(e.target.value); dirty = true; };
-      // admin: choose the therapist of this report, filtered by the selected center
-      const thSel = main.querySelector("#thSel");
-      if (thSel) {
-        const fillTh = () => {
-          const cur = rec.therapist || (rec.expand && rec.expand.therapist && rec.expand.therapist.id) || S.me.id;
-          const list = (S.therapists || []).filter((t) => (t.centers || []).includes(rec.center) || t.id === cur);
-          if (!list.some((t) => t.id === S.me.id) && cur === S.me.id) list.unshift(S.me);
-          thSel.innerHTML = list.map((t) => `<option value="${t.id}" ${t.id === cur ? "selected" : ""}>${esc(t.name || t.email)}</option>`).join("");
-        };
-        fillTh();
-        thSel.onchange = () => { rec.therapist = thSel.value; rec.expand = Object.assign({}, rec.expand, { therapist: (S.therapists || []).find((t) => t.id === thSel.value) || S.me }); dirty = true; };
-        const cSel = top.querySelector('[data-path="center"]');
-        if (cSel) cSel.addEventListener("change", () => setTimeout(fillTh, 0));
-      }
     }
+
+    // ----- the therapist whose name / signature goes on the document (classified by center)
+    // In your own center the document is in your name. For a center you are not classified on,
+    // you choose a therapist of that center. Admins may choose any therapist of the center.
+    const thField = main.querySelector("#thField");
+    const renderTh = () => {
+      if (!thField) return;
+      const cur = rec.therapist || (rec.expand && rec.expand.therapist && rec.expand.therapist.id) || "";
+      const curU = (S.therapists || []).find((t) => t.id === cur);
+      const list = (S.therapists || []).filter((t) => inCenterOf(t, rec.center));
+      if (!sb) {
+        if (curU && inCenterOf(curU, rec.center)) rec.therapist = cur;                       // keep (own or colleague's document)
+        else if (isAdmin() || inCenterOf(S.me, rec.center)) rec.therapist = S.me.id;            // your name by default
+        else rec.therapist = "";                                                              // must choose
+      }
+      const locked = sb || (!isAdmin() && inCenterOf(S.me, rec.center));
+      const name = (u) => esc((UI === "en" && u.name_en) || u.name || u.username || "");
+      thField.innerHTML = `<label class="f">الأخصائي/ة (يظهر اسمه وتوقيعه على المستند)</label>` + (locked
+        ? `<div class="input" style="background:#f6f6f6">${name(therapistRec())}</div>`
+        : `<select class="input" id="thSel"><option value="">— اختر أخصائياً من معالجي هذا المركز —</option>${list.map((t) => `<option value="${t.id}" ${t.id === rec.therapist ? "selected" : ""}>${name(t)}</option>`).join("")}</select>
+           ${!isAdmin() && !inCenterOf(S.me, rec.center) ? `<div class="hint" style="color:#a15c07">أنت غير مصنّف على هذا المركز، فالمستند لازم يكون باسم أحد معالجيه.</div>` : `<div class="hint">القائمة حسب المركز المختار.</div>`}`);
+      const sel = thField.querySelector("#thSel");
+      if (sel) sel.onchange = () => {
+        rec.therapist = sel.value; rec.expand = Object.assign({}, rec.expand, { therapist: (S.therapists || []).find((t) => t.id === sel.value) || null }); dirty = true;
+        if (docText.value.trim()) toast("تغيّر اسم الأخصائي: اضغط «توليد النص» ليظهر الاسم الجديد في المستند.");
+      };
+    };
+    const cSel = top.querySelector('[data-path="center"]');
+    if (cSel) cSel.addEventListener("change", () => setTimeout(renderTh, 0));
 
     // ----- language toggle
     const langT = main.querySelector("#langT");
@@ -949,7 +1034,9 @@
     setLang(lang);
 
     // ----- generation & export
-    const therapistRec = () => (rec.expand && rec.expand.therapist) || (rec.therapist && (S.therapists || []).find((t) => t.id === rec.therapist)) || S.me;
+    const therapistRec = () => (rec.therapist && ((S.therapists || []).find((t) => t.id === rec.therapist) || (rec.expand && rec.expand.therapist && rec.expand.therapist.id === rec.therapist && rec.expand.therapist)))
+      || (sandbox || rec.therapist === undefined ? S.me : { id: "", name: "" });
+    renderTh();
     const ctxFor = (l) => {
       const c = centerById(rec.center); const p = planRec();
       return { lang: l, pc: pcFor(l), patient, therapistName: clinicianName(therapistRec(), l), reportDate: d10(isPlan ? rec.start_date : rec.report_date),
@@ -963,6 +1050,7 @@
         if (!therapistRec().name_en) miss.push("اسم الأخصائي بالإنجليزي");
         if (miss.length) toast("للمستند الإنجليزي ينقص: " + miss.join(" و "), true);
       }
+      if (!sandbox && !rec.therapist) { toast("اختر اسم الأخصائي أولاً (من معالجي مركز المستند).", true); return docText.value; }
       let out = form.generate(data, ctxFor(lang));
       if (lang === "en") {
         out = FC.toEnglish(out, pcAr, pcFor("en"));
@@ -1043,6 +1131,7 @@
     if (save) save.onclick = async () => {
       if (!isPlan && rec.status === "نهائي" && !docText.value.trim()) { toast("لا يمكن اعتماد تقرير بدون نص. اضغط «توليد النص» أولاً.", true); return; }
       if (isPlan && (!rec.start_date || !rec.end_date)) { toast("حدد تاريخ البداية والانتهاء", true); return; }
+      if (!rec.therapist) { toast("اختر اسم الأخصائي من معالجي هذا المركز قبل الحفظ.", true); thField && thField.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
       if (isPlan) {
         const noCrit = (data.blocks || []).flatMap((b) => b.stgs || []).filter((s) => { const t = s[lang] || s.ar || s.en || ""; return t.trim() && !/\d/.test(t); });
         if (noCrit.length && !confirm(`يوجد ${noCrit.length} هدف قصير المدى بدون معيار رقمي (بند C9 حرج). الحفظ على أي حال؟`)) return;
@@ -1057,8 +1146,9 @@
         } else {
           payload = { patient: patient.id, center: rec.center, report_type: rec.report_type, report_date: rec.report_date, next_due: rec.next_due || "",
             status: rec.status, report_lang: lang, assessment: data, report_text: docText.value, plan: rec.plan || "" };
-          if (isAdmin() && rec.therapist) payload.therapist = rec.therapist;
+
         }
+        payload.therapist = rec.therapist;
         payload = filePayload(root, fstate, payload);
         if (id === "new" && rec.previous) payload.previous = rec.previous;
         const saved = id === "new" ? await pb.collection(coll).create(payload) : await pb.collection(coll).update(id, payload);
@@ -1287,6 +1377,7 @@
       main.querySelectorAll("[data-ex]").forEach((b) => b.onclick = async () => {
         const [coll, id, fmt] = b.dataset.ex.split(":");
         const x = all.find((i) => i.r.id === id);
+        if (x.r.uploaded && (x.r.files || []).length) { try { await pb.files.download(x.r, x.r.files[0]); } catch (e) { toast(errText(e), true); } return; }
         if (!x.text) { toast("لم يتم توليد نص لهذا المستند بعد.", true); return; }
         await exportDoc(fmt, x.text, x.lang, x.r.center || x.p.center, `${x.p.file_no}_${x.type}_${x.date}`, { collection: coll, id });
       });

@@ -63,7 +63,7 @@
         getURL: (rec, name) => (name && String(name).startsWith("data:") ? name : ""),
         getToken: async () => this.authStore.token,
         download: async (rec, name) => {
-          const r = await this.call({ action: "fileData", collection: rec.collectionName, id: rec.id, name });
+          const r = await this.call({ action: "fileData", token: this.authStore.token, collection: rec.collectionName, id: rec.id, name });
           const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
           const blob = new Blob([bytes], { type: r.mime });
           const url = URL.createObjectURL(blob);

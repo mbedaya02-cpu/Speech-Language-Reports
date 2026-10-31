@@ -581,7 +581,7 @@
       <div class="crumbs">${A.isAdmin() ? `<a href="#/quality">${t("الجودة والتدقيق", "Quality")}</a> / <a href="#/quality/t/${a.therapist}">${esc(tName(a.therapist))}</a>` : `<a href="#/quality/me">${t("نتائج التدقيق", "My audit results")}</a>`} / ${esc(mLabel(a.month))}</div>
       <div class="page-head"><h1 class="grow">${t("تقرير التدقيق الشهري", "Monthly audit report")} — ${esc(tName(a.therapist))}</h1>
         ${a.status === "submitted" ? `<span class="pill ok">${t("معتمد", "Submitted")}</span>` : `<span class="pill warn">${t("مسودة", "Draft")}</span>`}
-        <button class="btn" id="pdfB">PDF</button><button class="btn" id="docB">Word</button>
+        <button class="btn" id="pdfB">PDF</button>${A.isAdmin() ? `<button class="btn" id="docB">Word</button>` : ""}
         ${A.isAdmin() ? `<a class="btn ${a.status === "draft" ? "primary" : ""}" href="#/quality/a/${id}?edit=1">${a.status === "draft" ? t("متابعة التدقيق", "Continue audit") : t("تصحيح موثّق", "Documented correction")}</a>` : ""}</div>
       <div class="qa-kpis">
         <div class="panel kpi"><div class="panel-body"><div class="kv">${pct(a.total)}</div><div class="kl">${t("النتيجة الكلية", "Overall score")}</div><div>${clsPill(tpl, a.total)}</div></div></div>
@@ -607,7 +607,7 @@
         ${(a.history || []).length ? `<div style="margin-top:8px"><strong>${t("سجل التدقيق", "Audit trail")}:</strong>${a.history.map((h) => `<div>• ${esc(String(h.at || "").slice(0, 16).replace("T", " "))} — ${esc(h.by)}: ${h.action === "submit" ? t("اعتماد", "submitted") + ` (${pct(h.total)})` : t("تصحيح", "correction") + ` «${esc(h.reason)}» (${pct(h.before)} ← ${pct(h.after)})`}</div>`).join("")}</div>` : ""}</div></div>`;
     const doExport = (fmt) => A.exportDoc(fmt, reportText(a, prev, prevList, acts), A.UI, a.center, `Audit_${tName(a.therapist)}_${a.month}`, { collection: "qa_audits", id: a.id });
     main.querySelector("#pdfB").onclick = () => doExport("pdf");
-    main.querySelector("#docB").onclick = () => doExport("docx");
+    if (main.querySelector("#docB")) main.querySelector("#docB").onclick = () => doExport("docx");
   }
 
   // report markup for Word / PDF (center letterhead + auditor signature). File numbers only, no child names.
