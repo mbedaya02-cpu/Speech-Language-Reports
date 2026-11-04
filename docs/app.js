@@ -87,7 +87,8 @@
   }
   const centerById = (id) => S.centers.find((c) => c.id === id);
   // therapists are classified by center (users.centers)
-  const inCenterOf = (u, centerId) => !!(u && centerId && (u.centers || []).includes(centerId));
+  // (a user with no center classification yet counts for every center, so nobody is ever blocked from saving)
+  const inCenterOf = (u, centerId) => !!(u && centerId && (!(u.centers || []).length || u.centers.includes(centerId)));
   function centerTag(id) {
     const c = centerById(id);
     if (!c) return "";
@@ -438,6 +439,7 @@
         <datalist id="insList"><option>Thiqa</option><option>Daman Enhanced</option><option>Daman Basic</option><option>ADNIC</option><option>نقدي (بدون تأمين)</option></datalist></div>
       <div class="field"><label class="f">رقم بطاقة التأمين</label><input class="input mono" name="insurance_no" value="${esc(p.insurance_no)}"></div>
       <div class="field"><label class="f">التشخيص المبدئي</label><input class="input" name="diagnosis" value="${esc(p.diagnosis)}"></div>
+      <div class="field"><label class="f">تاريخ التقييم</label><input class="input" type="date" name="eval_date" value="${d10(p.eval_date)}"></div>
       <div class="field"><label class="f">تاريخ بدء العلاج</label><input class="input" type="date" name="start_date" value="${d10(p.start_date)}"></div>
       <div class="field"><label class="f">الحالة</label><select class="input" name="status">${PATIENT_STATUS.map((s) => `<option ${p.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
     </div>
@@ -448,7 +450,7 @@
       onOk: async (root) => {
         const data = {};
         ["center", "file_no", "full_name", "full_name_en", "gender", "nationality", "guardian_name", "phone", "insurance_company", "insurance_no", "diagnosis", "status", "notes"].forEach((k) => data[k] = val(root, k));
-        data.dob = toPb(val(root, "dob")); data.start_date = toPb(val(root, "start_date"));
+        data.dob = toPb(val(root, "dob")); data.start_date = toPb(val(root, "start_date")); data.eval_date = toPb(val(root, "eval_date"));
         if (canAssign) data.therapists = [...root.querySelectorAll("#thr .chip.on")].map((c) => c.dataset.id);
         if (!data.file_no || !data.full_name || !data.gender) { toast("رقم الملف والاسم والجنس مطلوبة (الجنس يحدد صياغة التقارير)", true); return false; }
         const rec = p.id ? await pb.collection("patients").update(p.id, data) : await pb.collection("patients").create(data);
@@ -480,12 +482,13 @@
       pb.collection("reports").getFullList({ filter: pb.filter("patient = {:id}", { id }), sort: "-report_date", expand: "therapist" }),
       pb.collection("soap_notes").getFullList({ filter: pb.filter("patient = {:id}", { id }), sort: "-date", expand: "therapist" }).catch(() => []),
     ]);
+    const lastEval = reports.find((r) => ["تقرير تقييم", "تقرير إعادة تقييم", "تقرير التقييم الأولي"].includes(r.report_type));
     const info = [
       ["رقم الملف", `<span class="mono">${esc(p.file_no)}</span>`], ["المركز", centerTag(p.center)],
       ["تاريخ الميلاد", `${d10(p.dob) || "—"} <span class="muted">(${esc(A.ageString(p.dob, today(), UI)) || "—"})</span>`],
       ["الجنس", esc(p.gender || "—")], ["الجنسية", esc(p.nationality || "—")], ["ولي الأمر", esc(p.guardian_name || "—")], ["الهاتف", `<span class="mono">${esc(p.phone || "—")}</span>`],
       ["التأمين", esc([p.insurance_company, p.insurance_no].filter(Boolean).join(" · ") || "—")], ["التشخيص", esc(p.diagnosis || "—")],
-      ["بدء العلاج", d10(p.start_date) || "—"], ["الأخصائي", esc(((p.expand && p.expand.therapists) || []).map((t) => t.name).join("، ") || "—")],
+      ["تاريخ التقييم", d10(p.eval_date) || (lastEval ? `<span class="muted">${d10(lastEval.report_date)} (من آخر تقرير تقييم)</span>` : "—")], ["بدء العلاج", d10(p.start_date) || "—"], ["الأخصائي", esc(((p.expand && p.expand.therapists) || []).map((t) => t.name).join("، ") || "—")],
     ];
     const planRows = plans.map((r) => {
       const dl = daysLeft(r.end_date);
@@ -512,7 +515,7 @@
           ${plans.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>الفترة</th><th>الحالة</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${planRows}</tbody></table></div>` : `<div class="empty">لا توجد خطط بعد.</div>`}
         </div>
         <div data-pane="reports" class="${tab === "reports" ? "" : "hidden"}">
-          <div class="panel-head"><span class="grow muted">تقييم أولي، تقرير تقييم، إعادة تقييم، تقييم مرحلي، خروج، أو تقرير لجهة خارجية</span>${canClinical() ? `<button class="btn primary" id="newR">+ تقرير جديد</button>` : ""}</div>
+          <div class="panel-head"><span class="grow muted">تقييم أولي، تقرير تقييم، إعادة تقييم، تقييم مرحلي، خروج، أو تقرير لجهة خارجية</span>${canClinical() ? `<button class="btn" id="upRep">⬆ رفع تقرير جاهز (ملف)</button> <button class="btn primary" id="newR">+ تقرير جديد</button>` : ""}</div>
           ${reports.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>التقرير التالي</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${reportRows}</tbody></table></div>` : `<div class="empty">لا توجد تقارير بعد.</div>`}
         </div>
         <div data-pane="soap" class="${tab === "soap" ? "" : "hidden"}">${window.SOAP ? window.SOAP.listHtml(soaps, p, canClinical()) : ""}</div>
@@ -533,6 +536,8 @@
       const r = plans.find((x) => x.id === b.dataset.upfile);
       try { toast("جاري فتح الملف…"); await pb.files.download(r, b.dataset.name); } catch (err) { toast(errText(err), true); }
     });
+    const upR = main.querySelector("#upRep");
+    if (upR) upR.onclick = () => uploadReportModal(p);
     const up = main.querySelector("#upPlan");
     if (up) up.onclick = () => uploadPlanModal(p);
     const nr = main.querySelector("#newR");
@@ -603,6 +608,62 @@
     };
   }
 
+  // ----- upload a ready report (any type, any file). A Word file made with the site's templates is read:
+  // its text becomes the report text and every matching section fills the form fields.
+  function uploadReportModal(p) {
+    const center0 = p.center;
+    const m = modal("رفع تقرير جاهز", `<div class="grid cols-2">
+      <div class="field" style="grid-column:span 2"><label class="f">ملف التقرير (Word / PDF / صورة) *</label><input class="input" type="file" name="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"></div>
+      <div class="field"><label class="f">نوع التقرير *</label><select class="input" name="report_type">${REPORT_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">تاريخ التقرير *</label><input class="input" type="date" name="report_date" value="${today()}"></div>
+      <div class="field"><label class="f">المركز</label><select class="input" name="center">${S.centers.map((c) => `<option value="${c.id}" ${center0 === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">الأخصائي/ة</label><div id="thBox">${thChooserHtml(center0, "")}</div></div>
+      <div class="field"><label class="f">حالة التقرير</label><select class="input" name="status"><option>مسودة</option><option>نهائي</option></select></div>
+      <div class="field"><label class="f">موعد التقرير التالي (اختياري)</label><input class="input" type="date" name="next_due"></div></div>
+      <div class="field"><label class="f">قراءة الملف</label><div id="rpBox" class="hint">اختر ملف Word (.docx) بنفس نماذج الموقع، وبيتوزّع على بنود التقرير لحاله.</div></div>`, {
+      okText: "رفع وحفظ", wide: true,
+      onOk: async (root) => {
+        const f = root.querySelector('[name="file"]').files[0];
+        const type = val(root, "report_type"), form = window.Forms[KIND[type] || "external"];
+        const data = { patient: p.id, center: val(root, "center"), therapist: val(root, "therapist"), report_type: type, report_date: toPb(val(root, "report_date")),
+          status: val(root, "status"), next_due: toPb(val(root, "next_due")), uploaded: true, report_lang: "ar", report_text: "", assessment: {} };
+        if (!f) { toast("اختر ملف التقرير", true); return false; }
+        if (!data.therapist) { toast("اختر اسم الأخصائي من معالجي هذا المركز.", true); return false; }
+        if (!data.report_date) { toast("حدد تاريخ التقرير", true); return false; }
+        if (parsed && parsed.ok && parsed.type === type) {
+          data.report_text = parsed.markup; data.report_lang = parsed.lang;
+          const def = form.defaults(FC.personCtx(p, "ar"));
+          Object.entries(parsed.values).forEach(([k, v]) => { def[k] = v && typeof v === "object" && !Array.isArray(v) && def[k] && typeof def[k] === "object" ? Object.assign({}, def[k], v) : v; });
+          data.assessment = def;
+        }
+        if (data.status === "نهائي" && !data.report_text) data.status = "مسودة";
+        data["files+"] = [f];
+        const saved = await pb.collection("reports").create(data);
+        toast("تم رفع التقرير إلى ملف الطفل ✓"); go(`#/report/${saved.id}`);
+      },
+    });
+    m.querySelector('[name="center"]').onchange = (e) => { m.querySelector("#thBox").innerHTML = thChooserHtml(e.target.value, ""); };
+    let parsed = null;
+    const read = async () => {
+      const box = m.querySelector("#rpBox"), f = m.querySelector('[name="file"]').files[0], type = val(m, "report_type");
+      parsed = null; if (!f) return;
+      if (!/\.docx$/i.test(f.name)) { box.innerHTML = `<div class="note-box">${esc(window.PlanImport.REASON["word-only"])}</div>`; return; }
+      box.textContent = "جاري قراءة الملف…";
+      parsed = await window.PlanImport.parseReport(f, window.Forms[KIND[type] || "external"], FC.personCtx(p, "ar"));
+      if (!parsed.ok) { box.innerHTML = `<div class="note-box">${esc(window.PlanImport.REASON[parsed.reason] || "")}</div>`; return; }
+      parsed.type = type;
+      const warn = [];
+      if (parsed.info.date) m.querySelector('[name="report_date"]').value = parsed.info.date;
+      if (parsed.info.file_no && String(parsed.info.file_no).trim() !== String(p.file_no).trim()) warn.push(`⚠ رقم الملف داخل التقرير (${parsed.info.file_no}) لا يطابق ملف هذا الطفل (${p.file_no}). تأكد إنك رافع التقرير الصحيح.`);
+      box.innerHTML = (warn.length ? `<div class="note-box" style="color:#a15c07;margin-bottom:8px">${esc(warn.join(" "))}</div>` : "") +
+        `<div class="hint">انقرأ نص التقرير (${parsed.markup.split("\n").filter((x) => x.trim()).length} سطر)${parsed.info.date ? " وتاريخه" : ""}، وتعبّت هالبنود بالنموذج:</div>` +
+        (parsed.mapped.length ? `<ul class="rp-map">${parsed.mapped.map((x) => `<li><strong>${esc(x.label)}:</strong> ${esc(x.text.slice(0, 110))}${x.text.length > 110 ? "…" : ""}</li>`).join("")}</ul>` : `<div class="hint">— ما في بنود نصية مطابقة بهذا النوع، والنص الكامل محفوظ كنص التقرير.</div>`) +
+        `<details><summary class="hint">معاينة النص الكامل</summary><pre class="soap-pre">${esc(parsed.markup)}</pre></details>`;
+    };
+    m.querySelector('[name="file"]').onchange = read;
+    m.querySelector('[name="report_type"]').onchange = read;
+  }
+
   // an uploaded plan opens as its details + file(s) instead of the plan editor
   function pageUploadedPlan(rec, patient) {
     const main = shell("patients", "");
@@ -651,7 +712,7 @@
     root.querySelectorAll("[data-doc]").forEach((b) => b.onclick = async () => {
       const [kind, id, fmt] = b.dataset.doc.split(":");
       const r = (kind === "plan" ? plans : reports).find((x) => x.id === id);
-      if (r.uploaded && (r.files || []).length) { try { await pb.files.download(r, r.files[0]); } catch (e) { toast(errText(e), true); } return; }
+      if (r.uploaded && !(kind === "plan" ? r.plan_text : r.report_text) && (r.files || []).length) { try { await pb.files.download(r, r.files[0]); } catch (e) { toast(errText(e), true); } return; }
       const text = kind === "plan" ? r.plan_text : r.report_text;
       if (!text) { toast("لم يتم توليد نص بعد. افتح المستند واضغط «توليد النص» ثم احفظ.", true); return; }
       const lang = (kind === "plan" ? r.plan_lang : r.report_lang) || "ar";
@@ -755,7 +816,14 @@
       try { restored = JSON.parse(localStorage.getItem(k) || "null"); } catch (_) {}
       if (restored) { Object.assign(rec, restored.rec || {}); rec[field] = restored.data; if (isPlan) rec.plan_text = restored.text; else rec.report_text = restored.text; lang = (isPlan ? rec.plan_lang : rec.report_lang) || lang; dirty = true; }
     }
+    if (!sb && id === "new" && S.carry && S.carry.kind === kind) {
+      // filled in the forms preview, then moved to this child's file
+      rec[field] = deepClone(S.carry.data); lang = S.carry.lang || lang; if (isPlan) rec.plan_lang = lang; else rec.report_lang = lang;
+      if (isPlan) { rec.start_date = S.carry.start || rec.start_date; rec.end_date = S.carry.end || rec.end_date; }
+      S.carry = null; restored = restored || {};
+    }
     const data = (rec[field] && Object.keys(rec[field]).length) ? rec[field] : Object.assign(form.defaults(pcAr), rec[field] || {});
+    if (restored) dirty = true;
     if (isPlan) data.blocks = data.blocks || [];
     const fstate = {};
     const readonly = !canClinical();
@@ -874,7 +942,7 @@
       <div class="editor">
         <aside class="side panel"><div class="panel-body side-nav">${sideHtml}</div></aside>
         <div id="root">
-          ${soapInfo}${kind === "progress" && !sb ? `<div style="margin-bottom:10px"><button class="btn" id="soapFill" type="button">⟳ تعبئة من ملاحظات الجلسات (SOAP)</button></div>` : ""}
+          ${!isPlan && rec.uploaded && !sb ? `<div class="note-box" style="margin-bottom:12px">📎 تقرير مرفوع من ملف: ${rec.report_text ? "النص منقول من الملف كما هو (بالأسفل)، والبنود اللي انقرأت تعبّت بالنموذج. «توليد النص» بيكتب النص من خيارات النموذج من جديد." : "الملف الأصلي محفوظ بالمرفقات بالأسفل. هذا النوع من الملفات ما بينقرأ تلقائياً."}</div>` : ""}${soapInfo}${kind === "progress" && !sb ? `<div style="margin-bottom:10px"><button class="btn" id="soapFill" type="button">⟳ تعبئة من ملاحظات الجلسات (SOAP)</button></div>` : ""}
           <div class="panel" id="topPanel"><div class="panel-head"><h2 class="grow">بيانات ${isPlan ? "الخطة" : "التقرير"}</h2></div><div class="panel-body"><div class="grid cols-3">${topFields}</div></div></div>
           <div id="formRoot">${formHtml}</div>
           <div class="panel" id="s-doc"><div class="panel-head"><h2 class="grow">النص النهائي والتصدير</h2><span class="hint">راجع النص وعدّله بحرية قبل الحفظ</span></div><div class="panel-body">
@@ -887,7 +955,8 @@
             <button class="btn" id="gen">${kind === "scanning" ? "إنشاء التقرير" : "توليد النص"}</button>
             <button class="btn" id="copyBtn" title="نسخ النص">نسخ النص</button><span class="grow"></span>
             <button class="btn" id="wordBtn">Word</button><button class="btn" id="pdfBtn">PDF</button>
-            ${sb ? `<span class="pill warn">معاينة — لا يوجد حفظ</span>` : `<button class="btn primary" id="save">${kind === "scanning" ? "حفظ في ملف الطفل" : "حفظ"}</button>`}
+            ${sb ? (canClinical() ? `<button class="btn primary" id="moveSave">حفظ في ملف طفل…</button>` : `<span class="pill warn">معاينة</span>`) : `<button class="btn primary" id="save">${kind === "scanning" ? "حفظ في ملف الطفل" : "حفظ"}</button>`}
+            ${isAdmin() && !sb && id !== "new" ? `<button class="btn danger" id="delDoc">حذف</button>` : ""}
             ${!isPlan && !sb && kind === "scanning" ? `<a class="btn" id="newForm" href="#/report/new?patient=${patient.id}&type=${encodeURIComponent(rec.report_type)}">نموذج جديد</a>` : ""}</div>`}
           </div>
         </div>
@@ -1086,10 +1155,10 @@
       const list = (S.therapists || []).filter((t) => inCenterOf(t, rec.center));
       if (!sb) {
         if (curU && inCenterOf(curU, rec.center)) rec.therapist = cur;                       // keep (own or colleague's document)
-        else if (isAdmin() || inCenterOf(S.me, rec.center)) rec.therapist = S.me.id;            // your name by default
+        else if (isAdmin() || inCenterOf(S.me, rec.center) || !list.length) rec.therapist = S.me.id; // your name by default (also when that center has no therapists yet)
         else rec.therapist = "";                                                              // must choose
       }
-      const locked = sb || (!isAdmin() && inCenterOf(S.me, rec.center));
+      const locked = sb || (!isAdmin() && (inCenterOf(S.me, rec.center) || !list.length));
       const name = (u) => esc((UI === "en" && u.name_en) || u.name || u.username || "");
       thField.innerHTML = `<label class="f">الأخصائي/ة (يظهر اسمه وتوقيعه على المستند)</label>` + (locked
         ? `<div class="input" style="background:#f6f6f6">${name(therapistRec())}</div>`
@@ -1173,7 +1242,7 @@
       const sigFrom = () => (rec.id && !sandbox ? { collection: coll, id: rec.id } : { user: therapistRec().id || S.me.id });
       // Word / PDF only for a saved document with no unsaved changes (the preview page has no saving, so it stays free).
       const canExport = () => {
-        if (sandbox) return true;
+        if (sandbox) { if (isAdmin()) return true; toast("هذا نموذج معاينة: اضغط «حفظ في ملف طفل…» واحفظه، بعدها نزّل Word أو PDF.", true); return false; }
         if (id === "new" || dirty) { toast(kind === "scanning" ? "احفظ التقرير في ملف الطفل أولاً، بعدها نزّل Word أو PDF." : "احفظ أولاً، بعدها نزّل Word أو PDF.", true); const sv = main.querySelector("#save"); if (sv) { sv.classList.remove("pulse"); void sv.offsetWidth; sv.classList.add("pulse"); } return false; }
         if (!docText.value.trim()) { toast("النص فارغ: اضغط «" + (kind === "scanning" ? "إنشاء التقرير" : "توليد النص") + "» ثم احفظ، بعدها نزّل الملف.", true); return false; }
         return true;
@@ -1183,6 +1252,34 @@
       main.querySelector("#pdfBtn").onclick = () => { if (canExport()) exportDoc("pdf", exText(), lang, rec.center, fname(), sigFrom()); };
       main.querySelector("#wordBtn").title = main.querySelector("#pdfBtn").title = sandbox ? "" : "التنزيل متاح بعد الحفظ";
     }
+
+    // ----- forms preview: move what was filled to a real child's file, then save there
+    const mv = main.querySelector("#moveSave");
+    if (mv) mv.onclick = async () => {
+      const pts = await pb.collection("patients").getFullList({ sort: "file_no", filter: 'status != "مُخرَّج"' });
+      const m = modal("حفظ في ملف طفل", `<p class="hint">اختر الطفل، وبينتقل كل اللي عبّيته لملفه. راجع النص هناك واضغط «حفظ».</p>
+        <input class="input" id="ptq" placeholder="ابحث بالاسم أو رقم الملف…" style="margin-bottom:8px">
+        <select class="input" id="pts" size="8">${pts.map((p) => `<option value="${p.id}">${esc(p.file_no)} — ${esc(p.full_name)}</option>`).join("")}</select>`, {
+        okText: "متابعة",
+        onOk: (root) => {
+          const pid = root.querySelector("#pts").value;
+          if (!pid) { toast("اختر الطفل", true); return false; }
+          S.carry = { kind, data: deepClone(data), lang, start: rec.start_date, end: rec.end_date };
+          dirty = false;
+          go(isPlan ? `#/plan/new?patient=${pid}` : `#/report/new?patient=${pid}&type=${encodeURIComponent(rec.report_type)}`);
+        },
+      });
+      const qi = m.querySelector("#ptq"), sel = m.querySelector("#pts");
+      qi.oninput = () => { const q = qi.value.trim(); [...sel.options].forEach((o) => { o.hidden = q && !o.textContent.includes(q); }); };
+      qi.focus();
+    };
+
+    // ----- delete (admins only; the server refuses anyone else)
+    const delDoc = main.querySelector("#delDoc");
+    if (delDoc) delDoc.onclick = async () => {
+      if (!confirm(`حذف ${isPlan ? "هذه الخطة" : "هذا التقرير"} نهائياً مع مرفقاته؟ لا يمكن التراجع.`)) return;
+      try { await pb.collection(coll).delete(id); dirty = false; toast("تم الحذف"); go(`#/patient/${patient.id}?tab=${isPlan ? "plans" : "reports"}`); } catch (e) { toast(errText(e), true); }
+    };
 
     // ----- progress: (re)fill from SOAP notes
     const sfb = main.querySelector("#soapFill");
@@ -1472,12 +1569,18 @@
           <td><span class="pill ${x.kind === "plan" ? "info" : ""}">${x.kind === "plan" ? "خطة" : "تقرير"}</span> ${esc(x.type)}</td><td class="nowrap">${esc(x.date)}</td>
           <td class="mono">${esc(x.p.file_no)}</td><td><a href="#/patient/${x.p.id}">${esc(x.p.full_name)}</a></td><td>${centerTag(x.r.center || x.p.center)}</td>
           <td>${esc(x.t ? x.t.name : "")}</td><td>${statusPill(x.r.status)}</td>
-          <td class="nowrap"><a class="btn sm" href="#/${x.kind}/${x.r.id}">فتح</a> <button class="btn sm" data-ex="${x.coll}:${x.r.id}:docx">Word</button><button class="btn sm" data-ex="${x.coll}:${x.r.id}:pdf">PDF</button></td></tr>`).join("")}
+          <td class="nowrap"><a class="btn sm" href="#/${x.kind}/${x.r.id}">فتح</a> <button class="btn sm" data-ex="${x.coll}:${x.r.id}:docx">Word</button><button class="btn sm" data-ex="${x.coll}:${x.r.id}:pdf">PDF</button> <button class="btn sm danger" data-rm="${x.coll}:${x.r.id}" title="حذف">✕</button></td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">لا توجد مستندات مطابقة.</div>`;
+      main.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => {
+        const [coll, id] = b.dataset.rm.split(":");
+        const x = all.find((i) => i.r.id === id);
+        if (!confirm(`حذف «${x.type}» للمريض ${x.p.full_name || x.p.file_no} (${x.date}) نهائياً؟ لا يمكن التراجع.`)) return;
+        try { await pb.collection(coll).delete(id); toast("تم الحذف"); route(); } catch (e) { toast(errText(e), true); }
+      });
       main.querySelectorAll("[data-ex]").forEach((b) => b.onclick = async () => {
         const [coll, id, fmt] = b.dataset.ex.split(":");
         const x = all.find((i) => i.r.id === id);
-        if (x.r.uploaded && (x.r.files || []).length) { try { await pb.files.download(x.r, x.r.files[0]); } catch (e) { toast(errText(e), true); } return; }
+        if (x.r.uploaded && !x.text && (x.r.files || []).length) { try { await pb.files.download(x.r, x.r.files[0]); } catch (e) { toast(errText(e), true); } return; }
         if (!x.text) { toast("لم يتم توليد نص لهذا المستند بعد.", true); return; }
         await exportDoc(fmt, x.text, x.lang, x.r.center || x.p.center, `${x.p.file_no}_${x.type}_${x.date}`, { collection: coll, id });
       });

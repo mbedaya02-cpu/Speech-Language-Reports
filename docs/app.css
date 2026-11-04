@@ -295,3 +295,5 @@ table.t.mini td { padding: 4px 6px; font-size: 13px; }
 .pi-block { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
 .pi-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 .pi-row .input { flex: 1; width: auto; }
+.rp-map { margin: 6px 0; padding-inline-start: 18px; font-size: 13px; }
+.rp-map li { margin-bottom: 3px; }
