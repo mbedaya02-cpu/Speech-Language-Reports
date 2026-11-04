@@ -194,7 +194,7 @@
     const links = [
       ["#/", "الرئيسية", "home"],
       ["#/patients", "المرضى", "patients"],
-      ["#/forms", "النماذج", "forms"],
+      ...(isAdmin() ? [["#/forms", "النماذج", "forms"]] : []),
       ...(isAdmin() ? [["#/docs", "آخر المستندات", "docs"], ["#/quality", "الجودة والتدقيق", "quality"], ["#/users", "المستخدمون", "users"], ["#/audit", "سجل الحركات", "audit"], ["#/settings", "الإعدادات", "settings"]] : []),
       ...(isTherapist() ? [["#/quality/me", "نتائج التدقيق", "quality"]] : []),
       ["#/me", "ملفي", "me"],
@@ -273,9 +273,10 @@
       if (!h.length) return await pageDashboard();
       sandbox = false;
       if (h[0] === "patients") return await pagePatients();
-      if (h[0] === "forms") return pageForms();
-      if (h[0] === "try" && h[1] === "plan") return await pageDoc("plans", "new", true);
-      if (h[0] === "try" && h[1] === "report") return await pageDoc("reports", "new", true);
+      // the forms preview is for admins only
+      if (h[0] === "forms" && isAdmin()) return pageForms();
+      if (h[0] === "try" && h[1] === "plan" && isAdmin()) return await pageDoc("plans", "new", true);
+      if (h[0] === "try" && h[1] === "report" && isAdmin()) return await pageDoc("reports", "new", true);
       if (h[0] === "patient" && h[1]) return await pagePatient(h[1]);
       if (h[0] === "plan" && h[1]) return await pageDoc("plans", h[1]);
       if (h[0] === "report" && h[1]) return await pageDoc("reports", h[1]);
@@ -745,7 +746,7 @@
   function filesBlock(rec, collection) {
     const files = (rec && rec.files) || [];
     return `<div class="field"><label class="f">المرفقات (نسخة موقعة، تقارير خارجية…) — PDF / Word / صور</label>
-      <div class="files" id="fileList">${files.map((f) => `<span><a href="#" data-file="${esc(f)}">📎 ${esc(String(f).split("__").slice(1).join("__") || f)}</a> <button class="btn sm danger" data-rmfile="${esc(f)}" title="حذف">✕</button></span>`).join("") || '<span class="hint">لا توجد مرفقات</span>'}</div>
+      <div class="files" id="fileList">${files.map((f) => `<span><a href="#" data-file="${esc(f)}">📎 ${esc(String(f).split("__").slice(1).join("__") || f)}</a> ${isAdmin() ? `<button class="btn sm danger" data-rmfile="${esc(f)}" title="حذف">✕</button>` : ""}</span>`).join("") || '<span class="hint">لا توجد مرفقات</span>'}</div>
       <input type="file" id="newFiles" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="margin-top:8px"></div>`;
   }
   function bindFiles(root, rec, collection, state) {
