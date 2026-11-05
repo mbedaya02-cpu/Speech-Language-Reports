@@ -132,6 +132,17 @@
   const EN_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const longDate = (iso, ar) => { iso = d10(iso); if (!iso) return ""; const [y, m, d] = iso.split("-").map(Number); return ar ? `${d} ${AR_MONTHS[m - 1]} ${y}` : `${d} ${EN_MONTHS[m - 1]} ${y}`; };
 
+  // age rounded the way parents say it: "3 سنوات ونصف تقريباً", "18 شهراً تقريباً"
+  function approxAge(dob, at, ar) {
+    const p = window.FC.ageParts(dob, at); if (!p) return "";
+    if (p.total < 24) return ar ? `${p.total} ${p.total === 1 ? "شهر" : p.total === 2 ? "شهران" : p.total <= 10 ? "أشهر" : "شهراً"} تقريباً` : `about ${p.total} months`;
+    let y = p.y, half = false;
+    if (p.m >= 9) y++; else if (p.m >= 3) half = true;
+    if (!ar) return `about ${y}${half ? "½" : ""} years`;
+    const yw = y === 1 ? "سنة" : y === 2 ? "سنتان" : y <= 10 ? `${y} سنوات` : `${y} سنة`;
+    return `${yw}${half ? " ونصف" : ""} تقريباً`;
+  }
+
   const form = {
     kind: "scanning",
     noNextDue: true,
@@ -139,6 +150,7 @@
     sections: [
       { id: "session", title: L("بيانات الجلسة", "Session details"), fields: [
         { id: "attendees", type: "single", label: L("الحضور مع الطفل", "Attending with the child"), options: ATTEND },
+        { id: "age_approx", type: "text", label: L("العمر التقريبي (يُحسب تلقائياً من تاريخ الميلاد — اكتبه هنا فقط إذا تاريخ الميلاد غير معروف)", "Approximate age (calculated from the date of birth; type it only if the date of birth is unknown)") },
         { id: "reason", type: "textarea", label: L("سبب الزيارة كما ذكره الأهل", "Reason for the visit, in the parents' words") },
       ] },
       ...PARTS.map((p) => ({ id: "p_" + p.id, title: p.title, fields: [matrixField(p), ...p.singles.map(singleField), noteField(p)] })),
@@ -156,16 +168,18 @@
     },
 
     generate(d, ctx) {
+      const approx = approxAge(ctx.patient.dob, ctx.reportDate, ctx.lang === "ar") || String(d.age_approx || "").trim();
       const lang = ctx.lang, ar = lang === "ar", pc = ctx.pc, G = (s) => gx(s, pc), T = (o) => G(o[lang] || o.ar);
       const kid = ar ? (pc.female ? "الطفلة" : "الطفل") : "the child";
       const att = ATTEND.find((o) => o.v === d.attendees);
       const out = ["# " + (ar ? "تقرير الملاحظة الأولية" : "Initial Scanning Report")];
       if (ctx.centerFull) out.push("^^ " + ctx.centerFull);
       out.push("^^ " + (ar ? "قسم النطق واللغة" : "Speech and Language Department"), "", "::info4");
-      if (ar) out.push(`الاسم: ${pc.full}`, `رقم الملف: ${ctx.patient.file_no || ""}`, `العمر: ${pc.age}`, `تاريخ الجلسة: ${longDate(ctx.reportDate, true)}`,
-        `الأخصائي/ة: ${ctx.therapistName || ""}`, `الحضور مع ${kid}: ${att ? att.ar : ""}`);
-      else out.push(`Name: ${pc.full}`, `File no.: ${ctx.patient.file_no || ""}`, `Age: ${pc.age}`, `Session date: ${longDate(ctx.reportDate, false)}`,
-        `Therapist: ${ctx.therapistName || ""}`, `Attending with the child: ${att ? att.en : ""}`);
+      const dob = ctx.patient.dob ? window.FC.dmy(ctx.patient.dob) : "—";
+      if (ar) out.push(`الاسم: ${pc.full}`, `رقم الملف: ${ctx.patient.file_no || ""}`, `تاريخ الميلاد: ${dob}`, `العمر التقريبي: ${approx}`,
+        `تاريخ الجلسة: ${longDate(ctx.reportDate, true)}`, `الأخصائي/ة: ${ctx.therapistName || ""}`, `الحضور مع ${kid}: ${att ? att.ar : ""}`);
+      else out.push(`Name: ${pc.full}`, `File no.: ${ctx.patient.file_no || ""}`, `Date of birth: ${dob}`, `Approximate age: ${approx}`,
+        `Session date: ${longDate(ctx.reportDate, false)}`, `Therapist: ${ctx.therapistName || ""}`, `Attending with the child: ${att ? att.en : ""}`);
 
       out.push("", "::box");
       out.push(G(ar
