@@ -96,7 +96,7 @@
       const due = A.addMonths(base, 6), left = Math.round((new Date(due) - new Date(A.today())) / 86400000);
       if (left <= 14 && due < A.d10(act.end_date)) progWarn = `<div class="note-box" style="margin-bottom:12px">${left < 0 ? `⚠ التقرير المرحلي الإلزامي متأخر منذ ${-left} يوم (كان مستحقاً ${due}).` : `التقرير المرحلي الإلزامي مستحق بتاريخ ${due}.`} <a href="#/report/new?patient=${patient.id}&type=${encodeURIComponent("تقرير تقييم مرحلي")}&soap=1">كتابته الآن من ملاحظات الجلسات</a></div>`;
     }
-    let dirty = false; const setD = () => { dirty = true; A.setDirty(true); };
+    let dirty = false; const setD = () => { dirty = true; A.setDirty(true); const b = main.querySelector("#saveS"); if (b) { b.disabled = false; b.title = ""; } };
     const plan = () => plans.find((p) => p.id === n.plan);
     const prevFor = (key) => { const p = last.find((x) => x.id !== n.id && x.plan === n.plan && x.date <= (n.date + " 23") && (x.goals || []).some((g) => g.key === key)); return p ? (p.goals.find((g) => g.key === key) || null) : null; };
 
@@ -173,12 +173,13 @@
     root.addEventListener("input", (e) => {
       const el = e.target;
       if (el.dataset.f && el.dataset.f !== "plan") { n[el.dataset.f] = el.value; setD(); refreshPrev(); }
+      const svb = root.querySelector("#saveS"); if (svb && dirty) { svb.disabled = false; svb.title = ""; }
       if (el.dataset.gf) { const [i, k] = el.dataset.gf.split("."); n.goals[i][k] = el.value === "" ? "" : Math.max(0, Math.min(k === "acc" ? 100 : 9999, Number(el.value))); setD(); refreshPrev(); }
     });
     function bindBtns() {
       const add = root.querySelector("#addCustom");
       if (add) add.onclick = () => { const t = root.querySelector("#customG").value.trim(); if (!t) return; n.goals.push({ key: "c_" + Math.random().toString(36).slice(2, 8), custom: true, text: t, acc: "", trials: "", prompt: "", act: [], trend: "" }); setD(); render(); };
-      const sv = root.querySelector("#saveS"); if (sv) sv.onclick = save;
+      const sv = root.querySelector("#saveS"); if (sv) { sv.onclick = save; if (n.id) { sv.disabled = !dirty; sv.title = dirty ? "" : "ما في تعديل جديد للحفظ"; } }
       const pdf = root.querySelector("#pdfS"); if (pdf) pdf.onclick = () => {
         if (dirty) { A.toast("احفظ الملاحظة أولاً، بعدها نزّل PDF.", true); return; }
         const txt = ["# ملاحظة جلسة (SOAP)", "::info4", `الاسم: ${patient.full_name}`, `رقم الملف: ${patient.file_no}`, `تاريخ الجلسة: ${n.date}`, `الأخصائي: ${n.expand && n.expand.therapist ? n.expand.therapist.name : ""}`, "",

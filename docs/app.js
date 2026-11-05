@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-05d</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-05e</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -454,7 +454,7 @@
         data.dob = toPb(val(root, "dob")); data.start_date = toPb(val(root, "start_date")); data.eval_date = toPb(val(root, "eval_date"));
         if (canAssign) data.therapists = [...root.querySelectorAll("#thr .chip.on")].map((c) => c.dataset.id);
         if (!data.full_name || !data.gender) { toast("الاسم والجنس مطلوبان (الجنس يحدد صياغة التقارير)", true); return false; }
-        if (!data.file_no && p.id) { toast("رقم الملف لا يُترك فارغاً لمريض محفوظ.", true); return false; }
+        if (!data.file_no && !confirm("هل أنت متأكد أنه لا يوجد رقم ملف فعلي للطفل في المركز؟\n\nإذا ضغطت «موافق» سيُعطى الطفل رقماً مؤقتاً تلقائياً حسب التسلسل (TMP-…)، وتقدر تعدّله لاحقاً.")) return false;
         const rec = p.id ? await pb.collection("patients").update(p.id, data) : await pb.collection("patients").create(data);
         toast("تم الحفظ"); done && done(rec);
       },
@@ -701,7 +701,9 @@
       } catch (e) { toast(errText(e), true); }
       rr.disabled = false;
     };
-    const sv = main.querySelector("#svF"); if (sv) sv.onclick = async () => {
+    const sv = main.querySelector("#svF");
+    if (sv) { const sync = () => { if (!document.body.contains(sv)) return clearInterval(tm); sv.disabled = !((main.querySelector("#newFiles") || {}).files || []).length && !(st.removeFiles || []).length; }; const tm = setInterval(sync, 300); sync(); }
+    if (sv) sv.onclick = async () => {
       try { await pb.collection("plans").update(rec.id, filePayload(main, st, { therapist: rec.therapist, center: rec.center })); dirty = false; toast("تم الحفظ ✓"); route(); } catch (e) { toast(errText(e), true); }
     };
     const del = main.querySelector("#delU"); if (del) del.onclick = async () => {
@@ -1328,6 +1330,16 @@
 
     // ----- save
     const save = main.querySelector("#save");
+    // a saved document: «حفظ» opens only after something was changed
+    if (save && id !== "new") {
+      const syncSave = () => {
+        if (!document.body.contains(save)) { clearInterval(saveTimer); return; }
+        const off = !dirty && !(root.querySelector("#newFiles") && root.querySelector("#newFiles").files.length);
+        if (save.dataset.busy) return;
+        save.disabled = off; save.title = off ? "ما في تعديل جديد للحفظ" : "";
+      };
+      const saveTimer = setInterval(syncSave, 300); syncSave();
+    }
     if (save) save.onclick = async () => {
       if (!isPlan && rec.status === "نهائي" && !docText.value.trim()) { toast("لا يمكن اعتماد تقرير بدون نص. اضغط «توليد النص» أولاً.", true); return; }
       if (isPlan && (!rec.start_date || !rec.end_date)) { toast("حدد تاريخ البداية والانتهاء", true); return; }
@@ -1336,7 +1348,7 @@
         const noCrit = (data.blocks || []).flatMap((b) => b.stgs || []).filter((s) => { const t = s[lang] || s.ar || s.en || ""; return t.trim() && !/\d/.test(t); });
         if (noCrit.length && !confirm(`يوجد ${noCrit.length} هدف قصير المدى بدون معيار رقمي (بند C9 حرج). الحفظ على أي حال؟`)) return;
       }
-      save.disabled = true;
+      save.disabled = true; save.dataset.busy = "1";
       try {
         let payload;
         if (isPlan) {
@@ -1356,7 +1368,7 @@
         if (id === "new") { history.replaceState(null, "", `#/${isPlan ? "plan" : "report"}/${saved.id}`); lastHash = location.hash; }
         route();
       } catch (e) { toast(errText(e), true); }
-      save.disabled = false;
+      save.disabled = false; delete save.dataset.busy;
     };
     if (id !== "new") bindFiles(root, rec, coll, fstate);
     if (readonly && !sb) root.querySelectorAll("input,select,textarea,.chip,.btn").forEach((el) => el.disabled = true);
