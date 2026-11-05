@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-05</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-05b</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -427,7 +427,7 @@
     const canAssign = isAdmin() || S.me.role === "reception";
     const body = `<div class="grid cols-2">
       <div class="field"><label class="f">المركز *</label><select class="input" name="center">${(p.id ? S.centers : myCenters).map((c) => `<option value="${c.id}" ${p.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
-      <div class="field"><label class="f">رقم الملف *</label><input class="input mono" name="file_no" value="${esc(p.file_no)}"></div>
+      <div class="field"><label class="f">رقم الملف</label><input class="input mono" name="file_no" value="${esc(p.file_no)}" placeholder="فارغ = رقم مؤقت تلقائي (TMP-…)"></div>
       <div class="field"><label class="f">الاسم بالعربي *</label><input class="input" name="full_name" value="${esc(p.full_name)}"></div>
       <div class="field"><label class="f">الاسم بالإنجليزي (للتقارير الإنجليزية)</label><input class="input" dir="ltr" name="full_name_en" value="${esc(p.full_name_en)}"></div>
       <div class="field"><label class="f">تاريخ الميلاد</label><input class="input" type="date" name="dob" value="${d10(p.dob)}"></div>
@@ -453,7 +453,8 @@
         ["center", "file_no", "full_name", "full_name_en", "gender", "nationality", "guardian_name", "phone", "insurance_company", "insurance_no", "diagnosis", "status", "notes"].forEach((k) => data[k] = val(root, k));
         data.dob = toPb(val(root, "dob")); data.start_date = toPb(val(root, "start_date")); data.eval_date = toPb(val(root, "eval_date"));
         if (canAssign) data.therapists = [...root.querySelectorAll("#thr .chip.on")].map((c) => c.dataset.id);
-        if (!data.file_no || !data.full_name || !data.gender) { toast("رقم الملف والاسم والجنس مطلوبة (الجنس يحدد صياغة التقارير)", true); return false; }
+        if (!data.full_name || !data.gender) { toast("الاسم والجنس مطلوبان (الجنس يحدد صياغة التقارير)", true); return false; }
+        if (!data.file_no && p.id) { toast("رقم الملف لا يُترك فارغاً لمريض محفوظ.", true); return false; }
         const rec = p.id ? await pb.collection("patients").update(p.id, data) : await pb.collection("patients").create(data);
         toast("تم الحفظ"); done && done(rec);
       },
@@ -1724,7 +1725,7 @@
         ${sheets.length > 1 ? `<div class="field"><label class="f">الورقة (Sheet)</label><select class="input" id="xs" style="width:auto">${sheets.map((n) => `<option>${esc(n)}</option>`).join("")}</select></div>` : ""}
         <label class="f">٣. تأكد من الأعمدة (تم اختيارها تلقائياً — غيّرها إذا لزم)</label>
         <div class="grid cols-3">${IMPORT_FIELDS.map(([k, t]) => `<div class="field"><label class="f">${t}</label><select class="input" data-col="${k}"><option value="-1">— لا يوجد —</option>${headers.map((h, i) => `<option value="${i}" ${g[k] === i ? "selected" : ""}>${esc(h || "عمود " + (i + 1))}</option>`).join("")}</select></div>`).join("")}</div>
-        <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xauto" ${g.file_no < 0 ? "checked" : ""}> الملف ما فيه رقم ملف: أعطِ كل مريض رقم ملف مؤقت (TMP-…) وعدّله لاحقاً من ملف المريض.</label>
+        <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xauto" ${g.file_no < 0 ? "checked" : ""}> الملف ما فيه رقم ملف: أعطِ كل مريض رقم ملف مؤقت بالتسلسل (TMP-…) وعدّله لاحقاً من ملف المريض.</label>
         <label class="hint" style="display:block;margin:6px 0"><input type="checkbox" id="xu"> المرضى الموجودين مسبقاً: عبّي الخانات الفاضية عندهم بس من الملف (أي شي ضفته أو عدّلته بالموقع ما بيتغيّر). بدون هذا الخيار يتم تخطيهم.</label>`;
       const xs = main.querySelector("#xs");
       if (xs) xs.value = curSheet, xs.onchange = () => { curSheet = xs.value; readSheet(curSheet); drawMap(); };
@@ -1740,7 +1741,7 @@
         let name = String(get(r, "full_name") || "").trim(), en = String(get(r, "full_name_en") || "").trim();
         if (name && !/[\u0600-\u06FF]/.test(name) && !en) en = name; // English-only name: keep it as the English name too
         const auto = col.file_no < 0 && main.querySelector("#xauto") && main.querySelector("#xauto").checked;
-        return { _row: r._row, file_no: auto ? `TMP-${pad2(r._row).padStart(4, "0")}` : String(get(r, "file_no") ?? "").trim(), full_name: name, full_name_en: en,
+        return { _row: r._row, file_no: auto ? "" : String(get(r, "file_no") ?? "").trim(), full_name: name, full_name_en: en,
           dob: toIsoDate(get(r, "dob")) || fromParts(get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")), dobRaw: get(r, "dob") || [get(r, "dob_day"), get(r, "dob_month"), get(r, "dob_year")].filter((x) => String(x).trim()).join("/"), nationality: normNationality(get(r, "nationality")), gender: normGender(get(r, "gender")),
           guardian_name: String(get(r, "guardian_name") ?? "").trim(), phone: String(get(r, "phone") ?? "").trim(),
           insurance_company: String(get(r, "insurance_company") ?? "").trim(), insurance_no: String(get(r, "insurance_no") ?? "").trim(),
@@ -1752,19 +1753,19 @@
       const box = main.querySelector("#xprev");
       const autoOn = main.querySelector("#xauto") && main.querySelector("#xauto").checked;
       if (col.full_name < 0 || (col.file_no < 0 && !autoOn)) { box.innerHTML = `<div class="panel"><div class="panel-body"><div class="err-box">اختر عمود «الاسم»، وعمود «رقم الملف» أو علّم «رقم ملف مؤقت».</div></div></div>`; return; }
-      const bad = list.filter((x) => !x.file_no || !x.full_name);
+      const bad = list.filter((x) => !x.full_name);
       const noDob = list.filter((x) => x.dobRaw !== "" && x.dobRaw != null && !x.dob);
       const ok = list.length - bad.length;
       box.innerHTML = `<div class="panel"><div class="panel-head"><h2 class="grow">٤. معاينة (${ok} صف صالح${bad.length ? ` · ${bad.length} ناقص` : ""})</h2>
           <button class="btn primary" id="xgo" ${ok ? "" : "disabled"}>استيراد ${ok} مريض</button></div>
         ${noDob.length ? `<div class="panel-body" style="padding-bottom:0"><div class="note-box">${noDob.length} تاريخ ميلاد لم يُفهم (مثال: «${esc(noDob[0].dobRaw)}»). الصيغة المتوقعة يوم/شهر/سنة. سيُستورد بدون تاريخ.</div></div>` : ""}
         <div class="table-wrap"><table class="t"><thead><tr><th>صف</th><th>رقم الملف</th><th>الاسم</th><th>بالإنجليزي</th><th>تاريخ الميلاد</th><th>العمر</th><th>الجنسية</th><th>الجنس</th><th>ولي الأمر</th><th>الهاتف</th><th>التأمين</th><th>التشخيص</th></tr></thead><tbody>
-        ${list.slice(0, 300).map((x) => `<tr class="${!x.file_no || !x.full_name ? "row-bad" : ""}"><td class="hint">${x._row}</td><td class="mono">${esc(x.file_no)}</td><td>${esc(x.full_name)}</td><td dir="ltr">${esc(x.full_name_en)}</td>
+        ${list.slice(0, 300).map((x) => `<tr class="${!x.full_name ? "row-bad" : ""}"><td class="hint">${x._row}</td><td class="mono">${x.file_no ? esc(x.file_no) : '<span class="pill info">تلقائي</span>'}</td><td>${esc(x.full_name)}</td><td dir="ltr">${esc(x.full_name_en)}</td>
           <td class="nowrap">${esc(x.dob)}</td><td class="nowrap">${x.dob ? esc(A.ageString(x.dob + " 00:00:00.000Z", today(), UI)) : ""}</td><td>${esc(x.nationality)}</td><td>${esc(x.gender)}</td><td>${esc(x.guardian_name)}</td><td class="mono">${esc(x.phone)}</td><td>${esc([x.insurance_company, x.insurance_no].filter(Boolean).join(" · "))}</td><td>${esc(x.diagnosis)}</td></tr>`).join("")}
         </tbody></table>${list.length > 300 ? `<div class="hint" style="padding:8px">… يظهر أول 300 صف فقط في المعاينة، وسيتم استيراد الكل.</div>` : ""}</div></div>`;
       const go2 = box.querySelector("#xgo");
       if (go2) go2.onclick = async () => {
-        const good = list.filter((x) => x.file_no && x.full_name).map(({ dobRaw, ...x }) => x);
+        const good = list.filter((x) => x.full_name).map(({ dobRaw, ...x }) => x);
         go2.disabled = true;
         const tot = { added: 0, updated: 0, skipped: 0, errors: [] };
         try {
