@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-05b</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-05d</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -196,7 +196,7 @@
       ["#/patients", "المرضى", "patients"],
       ...(isAdmin() ? [["#/forms", "النماذج", "forms"]] : []),
       ...(isAdmin() ? [["#/docs", "آخر المستندات", "docs"], ["#/quality", "الجودة والتدقيق", "quality"], ["#/users", "المستخدمون", "users"], ["#/audit", "سجل الحركات", "audit"], ["#/settings", "الإعدادات", "settings"]] : []),
-      ...(isTherapist() ? [["#/quality/me", "نتائج التدقيق", "quality"]] : []),
+      ...(isTherapist() ? [["#/docs", "آخر مستنداتي", "docs"], ["#/quality/me", "نتائج التدقيق", "quality"]] : []),
       ["#/me", "ملفي", "me"],
     ];
     const centerOpts = [`<option value="">كل المراكز</option>`, ...S.centers.map((c) => `<option value="${c.id}" ${S.centerFilter === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`)].join("");
@@ -282,7 +282,7 @@
       if (h[0] === "report" && h[1]) return await pageDoc("reports", h[1]);
       if (h[0] === "users" && isAdmin()) return await pageUsers();
       if (h[0] === "me") return await pageMe();
-      if (h[0] === "docs" && isAdmin()) return await pageDocs();
+      if (h[0] === "docs" && (isAdmin() || isTherapist())) return await pageDocs();
       if (h[0] === "import" && (isAdmin() || S.me.role === "reception")) return pageImport();
       if (h[0] === "audit" && isAdmin()) return await pageAudit();
       if (h[0] === "settings" && isAdmin()) return await pageSettings();
@@ -800,7 +800,7 @@
         if (q.prev) rec.previous = q.prev;
       }
     } else {
-      rec = await pb.collection(coll).getOne(id, { expand: "therapist" });
+      rec = await pb.collection(coll).getOne(id, { expand: "therapist,author,last_editor" });
       patient = await pb.collection("patients").getOne(rec.patient);
       if (isPlan && rec.uploaded) return pageUploadedPlan(rec, patient);
     }
@@ -941,6 +941,7 @@
       <div class="crumbs">${sb ? `<a href="#/forms">النماذج</a> / ${esc(title)}` : `<a href="#/patients">المرضى</a> / <a href="#/patient/${patient.id}?tab=${isPlan ? "plans" : "reports"}">${esc(patient.full_name)}</a> / ${esc(title)}`}</div>
       <div class="page-head"><h1 class="grow">${esc(title)} — ${esc(patient.full_name)}</h1>${rec.status ? statusPill(rec.status) : ""}
         ${rec.previous && id === "new" && isPlan ? `<span class="pill info">الأهداف منسوخة من الخطة السابقة</span>` : ""}</div>
+      ${id !== "new" && !sb && rec.expand && (rec.expand.author || rec.expand.last_editor) ? `<div class="hint" style="margin:-6px 0 12px">${rec.expand.author ? `أنشأه: <strong>${esc(rec.expand.author.name)}</strong>${rec.author !== rec.therapist ? ` <span class="pill warn">باسم ${esc((rec.expand.therapist || {}).name || "أخصائي آخر")}</span>` : ""}` : ""}${rec.expand.last_editor ? ` · آخر تعديل: ${esc(rec.expand.last_editor.name)} (${esc(String(rec.last_edit_at || rec.updated || "").slice(0, 16).replace("T", " "))})` : ""}</div>` : ""}
       <div class="editor">
         <aside class="side panel"><div class="panel-body side-nav">${sideHtml}</div></aside>
         <div id="root">
@@ -1538,24 +1539,32 @@
     const q = qs();
     const main = shell("docs", `<div class="empty">جاري التحميل…</div>`);
     const cf = centerFilterExpr("patient.center");
-    const [plans, reports, users] = await Promise.all([
+    const [plans, reports, users, created] = await Promise.all([
       pb.collection("plans").getList(1, 400, { filter: cf, sort: "-updated", expand: "patient,therapist" }),
       pb.collection("reports").getList(1, 400, { filter: cf, sort: "-updated", expand: "patient,therapist" }),
       pb.collection("users").getFullList({ sort: "name" }),
+      // who created each document (for documents saved before "author" was recorded)
+      pb.collection("audit_log").getFullList({ filter: 'action = "إضافة" && (collection_name = "plans" || collection_name = "reports")', fields: "record_id,user,user_name" }).catch(() => []),
     ]);
+    const createdBy = {}; created.forEach((a) => { createdBy[a.record_id] = a; });
+    const uName = (id) => { const u = users.find((x) => x.id === id); return u ? (u.name || u.username) : ""; };
+    const authorOf = (r) => (r.author ? { id: r.author, name: uName(r.author) } : createdBy[r.id] ? { id: createdBy[r.id].user, name: createdBy[r.id].user_name } : null);
     const all = [
       ...plans.items.map((r) => ({ kind: "plan", coll: "plans", r, type: r.plan_type, date: d10(r.start_date), text: r.plan_text, lang: r.plan_lang || "ar" })),
       ...reports.items.map((r) => ({ kind: "report", coll: "reports", r, type: r.report_type, date: d10(r.report_date), text: r.report_text, lang: r.report_lang || "ar" })),
     ].map((x) => ({ ...x, p: (x.r.expand && x.r.expand.patient) || {}, t: (x.r.expand && x.r.expand.therapist) || null }))
+      // a therapist sees his own documents: in his name, written by him, or last edited by him
+      .filter((x) => isAdmin() || x.r.therapist === S.me.id || (authorOf(x.r) || {}).id === S.me.id || x.r.last_editor === S.me.id)
       .sort((a, b) => String(b.r.updated).localeCompare(String(a.r.updated)));
     const ther = users.filter((u) => all.some((x) => x.r.therapist === u.id));
     const types = [...new Set(all.map((x) => x.type).filter(Boolean))];
     const statuses = [...new Set(all.map((x) => x.r.status).filter(Boolean))];
     const opt = (v, t, sel) => `<option value="${esc(v)}" ${sel === v ? "selected" : ""}>${esc(t)}</option>`;
-    main.innerHTML = `<div class="page-head"><div class="grow"><h1>آخر المستندات</h1><div class="muted">كل الخطط والتقارير — الأحدث تعديلاً أولاً${plans.totalItems + reports.totalItems > all.length ? ` (آخر ${all.length})` : ""}. لتغيير المركز استخدم القائمة في الأعلى.</div></div></div>
+    main.innerHTML = `<div class="page-head"><div class="grow"><h1>${isAdmin() ? "آخر المستندات" : "آخر مستنداتي"}</h1><div class="muted">${isAdmin() ? "كل الخطط والتقارير" : "الخطط والتقارير اللي باسمك أو كتبتها أو عدّلتها"} — الأحدث تعديلاً أولاً${plans.totalItems + reports.totalItems > all.length ? ` (آخر ${all.length})` : ""}. لتغيير المركز استخدم القائمة في الأعلى.</div></div></div>
       <div class="panel"><div class="panel-head" style="flex-wrap:wrap;gap:8px">
         <select class="input" id="fk" style="width:auto">${opt("", "خطط وتقارير", q.k)}${opt("plan", "الخطط فقط", q.k)}${opt("report", "التقارير فقط", q.k)}</select>
         <select class="input" id="ft" style="width:auto">${opt("", "كل المعالجين", q.t)}${ther.map((u) => opt(u.id, u.name || u.username, q.t)).join("")}</select>
+        <select class="input" id="fa" style="width:auto">${opt("", "أنشأه: الكل", q.a)}${users.filter((u) => all.some((x) => (authorOf(x.r) || {}).id === u.id)).map((u) => opt(u.id, "أنشأه: " + (u.name || u.username), q.a)).join("")}${opt("other", "أنشأه غير صاحب الاسم", q.a)}</select>
         <select class="input" id="fy" style="width:auto">${opt("", "كل الأنواع", q.y)}${types.map((t) => opt(t, t, q.y)).join("")}</select>
         <select class="input" id="fs" style="width:auto">${opt("", "كل الحالات", q.s)}${statuses.map((t) => opt(t, t, q.s)).join("")}</select>
         <input class="input" id="fq" placeholder="بحث بالاسم أو رقم الملف…" value="${esc(q.q || "")}" style="max-width:240px">
@@ -1563,15 +1572,19 @@
     const draw = () => {
       const k = main.querySelector("#fk").value, t = main.querySelector("#ft").value, y = main.querySelector("#fy").value, st = main.querySelector("#fs").value;
       const term = main.querySelector("#fq").value.trim().toLowerCase();
-      const items = all.filter((x) => (!k || x.kind === k) && (!t || x.r.therapist === t) && (!y || x.type === y) && (!st || x.r.status === st)
+      const fa = main.querySelector("#fa").value;
+      const items = all.filter((x) => (!k || x.kind === k) && (!t || x.r.therapist === t) && (!fa || (fa === "other" ? ((authorOf(x.r) || {}).id && authorOf(x.r).id !== x.r.therapist) : (authorOf(x.r) || {}).id === fa)) && (!y || x.type === y) && (!st || x.r.status === st)
         && (!term || [x.p.full_name, x.p.full_name_en, x.p.file_no].some((v) => String(v || "").toLowerCase().includes(term))));
       main.querySelector("#cnt").textContent = `${items.length} مستند`;
-      main.querySelector("#list").innerHTML = items.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>آخر تعديل</th><th>المستند</th><th>التاريخ</th><th>رقم الملف</th><th>المريض</th><th>المركز</th><th>المعالج</th><th>الحالة</th><th></th></tr></thead><tbody>
+      main.querySelector("#list").innerHTML = items.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>آخر تعديل</th><th>المستند</th><th>التاريخ</th><th>رقم الملف</th><th>المريض</th><th>المركز</th><th>باسم</th><th>أنشأه فعلياً</th><th>الحالة</th><th></th></tr></thead><tbody>
         ${items.map((x) => `<tr><td class="nowrap mono hint">${esc(String(x.r.updated || "").slice(0, 16).replace("T", " "))}</td>
           <td><span class="pill ${x.kind === "plan" ? "info" : ""}">${x.kind === "plan" ? "خطة" : "تقرير"}</span> ${esc(x.type)}</td><td class="nowrap">${esc(x.date)}</td>
           <td class="mono">${esc(x.p.file_no)}</td><td><a href="#/patient/${x.p.id}">${esc(x.p.full_name)}</a></td><td>${centerTag(x.r.center || x.p.center)}</td>
-          <td>${esc(x.t ? x.t.name : "")}</td><td>${statusPill(x.r.status)}</td>
-          <td class="nowrap"><a class="btn sm" href="#/${x.kind}/${x.r.id}">فتح</a> <button class="btn sm" data-ex="${x.coll}:${x.r.id}:docx">Word</button><button class="btn sm" data-ex="${x.coll}:${x.r.id}:pdf">PDF</button> <button class="btn sm danger" data-rm="${x.coll}:${x.r.id}" title="حذف">✕</button></td></tr>`).join("")}
+          <td>${esc(x.t ? x.t.name : "")}</td>
+          <td>${(() => { const a = authorOf(x.r); if (!a) return '<span class="hint">—</span>'; const other = a.id && a.id !== x.r.therapist;
+            return `${other ? '<span class="pill warn" title="المستند باسم أخصائي آخر">✎</span> ' : ""}${esc(a.name)}${x.r.last_editor && x.r.last_editor !== a.id ? `<div class="hint">آخر تعديل: ${esc(uName(x.r.last_editor))}</div>` : ""}`; })()}</td>
+          <td>${statusPill(x.r.status)}</td>
+          <td class="nowrap"><a class="btn sm" href="#/${x.kind}/${x.r.id}">فتح</a> <button class="btn sm" data-ex="${x.coll}:${x.r.id}:docx">Word</button><button class="btn sm" data-ex="${x.coll}:${x.r.id}:pdf">PDF</button>${isAdmin() ? ` <button class="btn sm danger" data-rm="${x.coll}:${x.r.id}" title="حذف">✕</button>` : ""}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">لا توجد مستندات مطابقة.</div>`;
       main.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => {
         const [coll, id] = b.dataset.rm.split(":");
@@ -1586,9 +1599,9 @@
         if (!x.text) { toast("لم يتم توليد نص لهذا المستند بعد.", true); return; }
         await exportDoc(fmt, x.text, x.lang, x.r.center || x.p.center, `${x.p.file_no}_${x.type}_${x.date}`, { collection: coll, id });
       });
-      history.replaceState(null, "", "#/docs?" + new URLSearchParams({ k, t, y, s: st, q: term }).toString()); lastHash = location.hash;
+      history.replaceState(null, "", "#/docs?" + new URLSearchParams({ k, t, a: fa, y, s: st, q: term }).toString()); lastHash = location.hash;
     };
-    ["#fk", "#ft", "#fy", "#fs"].forEach((sel) => main.querySelector(sel).onchange = draw);
+    ["#fk", "#ft", "#fa", "#fy", "#fs"].forEach((sel) => main.querySelector(sel).onchange = draw);
     let tm; main.querySelector("#fq").oninput = () => { clearTimeout(tm); tm = setTimeout(draw, 200); };
     draw();
   }
