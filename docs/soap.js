@@ -61,7 +61,10 @@
     const A = X();
     return `<div class="panel-head"><span class="grow muted">ملاحظة لكل جلسة: الأهداف التي عملت عليها اليوم + الأداء + ملاحظتك. منها يُبنى التقرير المرحلي.</span>
         ${canWrite ? `<a class="btn" href="#/report/new?patient=${patient.id}&type=${encodeURIComponent("تقرير تقييم مرحلي")}&soap=1">تقرير مرحلي من الملاحظات</a> <a class="btn primary" href="#/soap/new?patient=${patient.id}">+ ملاحظة جلسة</a>` : ""}</div>
-      ${notes.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>التاريخ</th><th>الحضور</th><th>الأهداف</th><th>متوسط الدقة</th><th>الأخصائي</th><th>الملاحظة</th></tr></thead><tbody>
+      ${notes.length ? `<div class="qa-filters soap-export" style="padding:10px 16px;border-bottom:1px solid var(--line)"><strong>تنزيل كل الملاحظات بملف واحد:</strong>
+          <label>من <input class="input sm" type="date" id="sxFrom"></label><label>إلى <input class="input sm" type="date" id="sxTo"></label>
+          <span class="hint">(فارغ = كل الجلسات)</span><button class="btn sm" id="sxWord" type="button">Word</button><button class="btn sm" id="sxPdf" type="button">PDF</button></div>
+        <div class="table-wrap"><table class="t"><thead><tr><th>التاريخ</th><th>الحضور</th><th>الأهداف</th><th>متوسط الدقة</th><th>الأخصائي</th><th>الملاحظة</th></tr></thead><tbody>
         ${notes.map((n) => { const accs = (n.goals || []).map((g) => Number(g.acc)).filter((x) => !isNaN(x) && x !== null && String(x) !== ""); const avg = accs.length ? Math.round(accs.reduce((s, x) => s + x, 0) / accs.length) : null;
           return `<tr class="click" data-go="#/soap/${n.id}"><td class="nowrap"><a href="#/soap/${n.id}">${esc(A.d10(n.date))}</a></td><td>${n.attendance === "attended" ? '<span class="pill ok">حضر</span>' : `<span class="pill warn">${esc(lbl(ATT, n.attendance))}</span>`}</td>
           <td>${(n.goals || []).length}</td><td>${avg == null ? "—" : avg + "%"}</td><td>${esc(n.expand && n.expand.therapist ? n.expand.therapist.name : "")}</td><td>${esc(String(n.note || "").slice(0, 90))}</td></tr>`; }).join("")}
@@ -234,5 +237,27 @@
     return [head, ...lines, none ? (ar ? `لم يُوثّق العمل على ${none} من أهداف الخطة خلال هذه الفترة.` : `${none} plan goal(s) were not documented in this period.`) : ""].filter(Boolean).join("\n");
   }
 
-  window.SOAP = { route, listHtml, soapText, progressFromNotes, progressSummary, PROMPT };
+  // ------------------------------------------------------------------ all notes of one child in one file
+  function bindList(root, notes, patient) {
+    const btn = (id, fmt) => { const b = root.querySelector(id); if (b) b.onclick = () => exportAll(notes, patient, fmt, root.querySelector("#sxFrom").value, root.querySelector("#sxTo").value); };
+    btn("#sxWord", "docx"); btn("#sxPdf", "pdf");
+  }
+  function exportAll(notes, patient, fmt, from, to) {
+    const A = X();
+    const list = notes.filter((n) => (!from || A.d10(n.date) >= from) && (!to || A.d10(n.date) <= to)).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (!list.length) { A.toast("ما في ملاحظات جلسات بهالفترة.", true); return; }
+    const att = list.filter((n) => n.attendance === "attended").length;
+    const period = `${FC.dmy(list[0].date)} — ${FC.dmy(list[list.length - 1].date)}`;
+    const out = ["# سجل ملاحظات الجلسات (SOAP)", "::info4", `الاسم: ${patient.full_name}`, `رقم الملف: ${patient.file_no || ""}`,
+      `الفترة: ${period}`, `عدد الجلسات: ${list.length} (حضر ${att})`, ""];
+    list.forEach((n, i) => {
+      const who = n.expand && n.expand.therapist ? n.expand.therapist.name : "";
+      out.push(`## ${i + 1}. جلسة ${FC.dmy(n.date)}${who ? " — " + who : ""}`);
+      soapText(n, patient).split("\n").forEach((l) => out.push(/^(S|O|A|P|S\/O):/.test(l) ? "**" + l.replace(/^([A-Z/]+):/, "$1:**") : l));
+      out.push("");
+    });
+    A.exportDoc(fmt, out.join("\n"), "ar", patient.center, `${patient.file_no || "child"}_SOAP_${A.d10(list[0].date)}_${A.d10(list[list.length - 1].date)}`, null);
+  }
+
+  window.SOAP = { route, listHtml, bindList, soapText, progressFromNotes, progressSummary, PROMPT };
 })();
