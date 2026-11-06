@@ -250,12 +250,22 @@
     const period = `${FC.dmy(list[0].date)} — ${FC.dmy(list[list.length - 1].date)}`;
     const out = ["# سجل ملاحظات الجلسات (SOAP)", "::info4", `الاسم: ${patient.full_name}`, `رقم الملف: ${patient.file_no || ""}`,
       `الفترة: ${period}`, `عدد الجلسات: ${list.length} (حضر ${att})`, ""];
-    list.forEach((n, i) => {
+    // one row per session date, one column per SOAP letter
+    const cell = (x) => String(x || "").replace(/\|/g, "/").replace(/\s+/g, " ").trim() || "—";
+    out.push("| التاريخ | S | O | A | P |");
+    list.forEach((n) => {
+      const parts = { S: [], O: [], A: [], P: [] }; let cur = "";
+      soapText(n, patient).split("\n").forEach((l) => {
+        const m = l.match(/^(S\/O|S|O|A|P):\s*(.*)$/);
+        if (m) { cur = m[1] === "S/O" ? "S" : m[1]; if (m[2]) parts[cur].push(m[2]); return; }
+        if (/^ملاحظة الأخصائي:/.test(l)) { parts.A.push(l); return; }
+        if (/^- /.test(l) && cur === "O") { parts.O.push(`(${parts.O.length + 1}) ${l.slice(2)}`); return; }
+        if (cur && l.trim()) parts[cur].push(l.trim());
+      });
       const who = n.expand && n.expand.therapist ? n.expand.therapist.name : "";
-      out.push(`## ${i + 1}. جلسة ${FC.dmy(n.date)}${who ? " — " + who : ""}`);
-      soapText(n, patient).split("\n").forEach((l) => out.push(/^(S|O|A|P|S\/O):/.test(l) ? "**" + l.replace(/^([A-Z/]+):/, "$1:**") : l));
-      out.push("");
+      out.push(`| ${FC.dmy(n.date)}${who ? " — " + cell(who) : ""} | ${cell(parts.S.join(" "))} | ${cell(parts.O.join(" "))} | ${cell(parts.A.join(" "))} | ${cell(parts.P.join(" "))} |`);
     });
+    out.push("", "S: المعطيات الذاتية · O: الأداء على الأهداف · A: التقييم وملاحظة الأخصائي · P: خطة الجلسة القادمة");
     A.exportDoc(fmt, out.join("\n"), "ar", patient.center, `${patient.file_no || "child"}_SOAP_${A.d10(list[0].date)}_${A.d10(list[list.length - 1].date)}`, null);
   }
 
