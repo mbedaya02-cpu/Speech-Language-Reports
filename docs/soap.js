@@ -252,20 +252,20 @@
       `الفترة: ${period}`, `عدد الجلسات: ${list.length} (حضر ${att})`, ""];
     // one row per session date, one column per SOAP letter
     const cell = (x) => String(x || "").replace(/\|/g, "/").replace(/\s+/g, " ").trim() || "—";
-    out.push("| التاريخ | S | O | A | P |");
+    out.push("| التاريخ | S | O | A | P | ملاحظة الأخصائي |");
     list.forEach((n) => {
-      const parts = { S: [], O: [], A: [], P: [] }; let cur = "";
+      const parts = { S: [], O: [], A: [], P: [], N: [] }; let cur = "";
       soapText(n, patient).split("\n").forEach((l) => {
         const m = l.match(/^(S\/O|S|O|A|P):\s*(.*)$/);
         if (m) { cur = m[1] === "S/O" ? "S" : m[1]; if (m[2]) parts[cur].push(m[2]); return; }
-        if (/^ملاحظة الأخصائي:/.test(l)) { parts.A.push(l); return; }
+        if (/^ملاحظة الأخصائي:/.test(l)) { parts.N.push(l.replace(/^ملاحظة الأخصائي:\s*/, "")); cur = "N"; return; }
         if (/^- /.test(l) && cur === "O") { parts.O.push(`(${parts.O.length + 1}) ${l.slice(2)}`); return; }
         if (cur && l.trim()) parts[cur].push(l.trim());
       });
       const who = n.expand && n.expand.therapist ? n.expand.therapist.name : "";
-      out.push(`| ${FC.dmy(n.date)}${who ? " — " + cell(who) : ""} | ${cell(parts.S.join(" "))} | ${cell(parts.O.join(" "))} | ${cell(parts.A.join(" "))} | ${cell(parts.P.join(" "))} |`);
+      out.push(`| ${FC.dmy(n.date)}${who ? " — " + cell(who) : ""} | ${cell(parts.S.join(" "))} | ${cell(parts.O.join(" "))} | ${cell(parts.A.join(" "))} | ${cell(parts.P.join(" "))} | ${cell(parts.N.join(" "))} |`);
     });
-    out.push("", "S: المعطيات الذاتية · O: الأداء على الأهداف · A: التقييم وملاحظة الأخصائي · P: خطة الجلسة القادمة");
+    out.push("", "S: المعطيات الذاتية · O: الأداء على الأهداف · A: التقييم · P: خطة الجلسة القادمة");
     A.exportDoc(fmt, out.join("\n"), "ar", patient.center, `${patient.file_no || "child"}_SOAP_${A.d10(list[0].date)}_${A.d10(list[list.length - 1].date)}`, null);
   }
 
