@@ -19,13 +19,13 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-06c</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-09b</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
-  const KIND = { "تقرير الملاحظة الأولية": "scanning", "تقرير التقييم الأولي": "initial", "تقرير تقييم": "evaluation", "تقرير إعادة تقييم": "evaluation", "تقرير تقييم مرحلي": "progress", "تقرير خروج": "discharge", "تقرير لجهة خارجية": "external" };
+  const KIND = { "تقرير الملاحظة الأولية": "scanning", "نموذج تحويل (Referral)": "referral", "تقرير التقييم الأولي": "initial", "تقرير تقييم": "evaluation", "تقرير إعادة تقييم": "evaluation", "تقرير تقييم مرحلي": "progress", "تقرير خروج": "discharge", "تقرير لجهة خارجية": "external" };
   const REPORT_TYPES = Object.keys(KIND);
-  const REPORT_HINT = { "تقرير الملاحظة الأولية": "Initial Scanning — انطباع الجلسة الأولى للأهل", "تقرير التقييم الأولي": "نموذج مختصر (ST_IA)", "تقرير تقييم": "التقييم الشامل بالعربي أو الإنجليزي", "تقرير إعادة تقييم": "نفس نموذج التقييم الشامل", "تقرير تقييم مرحلي": "تقرير التقدم المرتبط بالخطة", "تقرير خروج": "عند إنهاء العلاج", "تقرير لجهة خارجية": "مدرسة / تأمين / طبيب" };
+  const REPORT_HINT = { "تقرير الملاحظة الأولية": "Initial Scanning — انطباع الجلسة الأولى للأهل", "نموذج تحويل (Referral)": "تحويل لتخصص آخر: لمين، ليش، وشو المطلوب بالضبط", "تقرير التقييم الأولي": "نموذج مختصر (ST_IA)", "تقرير تقييم": "التقييم الشامل بالعربي أو الإنجليزي", "تقرير إعادة تقييم": "نفس نموذج التقييم الشامل", "تقرير تقييم مرحلي": "تقرير التقدم المرتبط بالخطة", "تقرير خروج": "عند إنهاء العلاج", "تقرير لجهة خارجية": "مدرسة / تأمين / طبيب" };
   const PLAN_STATUS = ["سارية", "تم التجديد", "منتهية", "ملغاة"];
   const PATIENT_STATUS = ["نشط", "متوقف مؤقتاً", "مُخرَّج"];
 
@@ -1405,6 +1405,7 @@
       <div class="grid cols-3">
         ${card("#/try/plan", "الخطة التربوية الفردية للنطق واللغة", "بيانات الخطة، ملخص التقييم، الأهداف وجداولها، المتابعة والاعتماد", "نموذج ST_TP")}
         ${card(T("تقرير تقييم"), "تقرير تقييم", "التقييم الشامل بالعربي أو الإنجليزي", "Evaluation Report")}
+        ${card(T("نموذج تحويل (Referral)"), "نموذج تحويل (Referral)", "تحويل مختصر وواضح لتخصص آخر: الجهة، المطلوب بالضبط، وملخص الحالة", "Referral")}
         ${card(T("تقرير الملاحظة الأولية"), "تقرير الملاحظة الأولية", "انطباع الجلسة الأولى للأهل: تقييم المهارات بأزرار وتقرير دافئ جاهز", "Initial Scanning")}
         ${card(T("تقرير التقييم الأولي"), "تقرير التقييم الأولي", "النموذج المختصر", "نموذج ST_IA")}
         ${card(T("تقرير تقييم مرحلي"), "تقرير تقييم مرحلي", "مرتبط بأهداف الخطة (خطة تجريبية جاهزة للمعاينة)", "نموذج PRO_REP")}

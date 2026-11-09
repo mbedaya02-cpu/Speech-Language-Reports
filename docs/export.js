@@ -16,6 +16,8 @@
 //         grid2 = 2 cells per row, label bold (oral-facial table)
 //    | a | b | c |          table; first row = header (shaded)
 //    ::bars                 "label: number (0-100)" lines until a blank line -> horizontal bar chart (audit history)
+//    ::sign2                two lines "Title | Name | [[SIG]] or text": signature blocks side by side, no table borders
+//                           (first line on the right in Arabic, second on the left)
 //    ::box                  shaded light paragraph(s) until a blank line (used for the parents' intro)
 //    ### {g} / {a} / {b} text  coloured sub-heading: green / amber / blue-grey (initial scanning lists)
 //    [[SIG]]                the therapist's signature + stamp images (from his profile); blank if none
@@ -48,6 +50,11 @@
         const rows = []; i++;
         while (i < src.length && src[i].trim()) { const x = src[i].trim(), k = x.lastIndexOf(":"); rows.push([x.slice(0, k).trim(), Number(x.slice(k + 1)) || 0]); i++; }
         blocks.push({ t: "bars", rows }); continue;
+      }
+      if (t === "::sign2") {
+        const sides = []; i++;
+        while (i < src.length && src[i].trim()) { sides.push(src[i].trim().split("|").map((x) => x.trim())); i++; }
+        blocks.push({ t: "sign2", sides: sides.slice(0, 2) }); continue;
       }
       if (t === "::box") {
         const paras = []; i++;
@@ -123,6 +130,7 @@
         case "h2": return `<h2>${inlineHtml(b.text)}</h2>`;
         case "h3": return b.color ? `<h3 class="tone" style="color:#${b.color}">${inlineHtml(b.text)}</h3>` : `<h3>${inlineHtml(b.text)}</h3>`;
         case "bars": return `<table class="bars">${b.rows.map(([l, v]) => `<tr><td class="bl">${esc(l)}</td><td><div class="bw"><div class="bf" style="width:${Math.max(0, Math.min(100, v))}%"></div></div></td><td class="bv">${esc(String(v))}%</td></tr>`).join("")}</table>`;
+        case "sign2": return `<table class="sign2"><tr>${b.sides.map((x) => `<td><div class="st">${inlineHtml(x[0] || "")}</div><div>${inlineHtml(x[1] || "")}</div><div class="ss">${inlineHtml(x[2] || "")}</div></td>`).join("")}</tr></table>`;
         case "box": return `<div class="box">${b.paras.map((x) => `<p>${inlineHtml(x)}</p>`).join("")}</div>`;
         case "h4": return `<h4>${inlineHtml(b.text)}</h4>`;
         case "center": return `<p class="center"><b>${inlineHtml(b.text)}</b></p>`;
@@ -164,6 +172,9 @@
   h2 { font-size: 13pt; margin: 14px 0 4px; page-break-after: avoid; }
   h3 { font-size: 12pt; margin: 10px 0 3px; text-decoration: underline; page-break-after: avoid; }
   h3.tone { text-decoration: none; }
+  table.sign2 { width: 100%; border: 0; margin-top: 18px; page-break-inside: avoid; }
+  table.sign2 td { border: 0; width: 50%; text-align: center; vertical-align: top; padding: 4px 10px; }
+  table.sign2 .st { font-weight: bold; } table.sign2 .ss { min-height: 70px; margin-top: 6px; }
   table.bars td { border: 0; padding: 3px 6px; vertical-align: middle; }
   table.bars td.bl { width: 22%; white-space: nowrap; } table.bars td.bv { width: 10%; font-weight: bold; }
   .bw { background: #EEF0F2; height: 14px; border-radius: 7px; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -268,6 +279,16 @@ ${body}
             ] });
           });
           kids.push(new d.Table({ width: { size: 100, type: d.WidthType.PERCENTAGE }, visuallyRightToLeft: rtl, rows }), P("", { after: 60 })); break;
+        }
+        case "sign2": {
+          const NB = { style: d.BorderStyle.NONE, size: 0, color: "FFFFFF" }, nb = { top: NB, bottom: NB, left: NB, right: NB };
+          const CA = d.AlignmentType.CENTER;
+          const cells = b.sides.map((x) => new d.TableCell({ borders: nb, width: { size: 50, type: d.WidthType.PERCENTAGE }, children: [
+            P(x[0] || "", { bold: true, align: CA, after: 40 }), P(x[1] || "", { align: CA, after: 40 }), P(x[2] || "", { align: CA, after: 0 })] }));
+          while (cells.length < 2) cells.push(new d.TableCell({ borders: nb, children: [P("")] }));
+          kids.push(P("", { after: 120 }), new d.Table({ width: { size: 100, type: d.WidthType.PERCENTAGE }, visuallyRightToLeft: rtl,
+            borders: { top: NB, bottom: NB, left: NB, right: NB, insideHorizontal: NB, insideVertical: NB }, rows: [new d.TableRow({ cantSplit: true, children: cells })] }));
+          break;
         }
         case "box": b.paras.forEach((x, k) => kids.push(new d.Paragraph({ bidirectional: rtl, alignment: d.AlignmentType.JUSTIFIED,
           spacing: { before: k ? 0 : 80, after: k === b.paras.length - 1 ? 160 : 60, line: 276 },
