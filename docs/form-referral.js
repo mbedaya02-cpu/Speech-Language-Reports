@@ -54,6 +54,9 @@
   const RETURN = [O("report", "تقرير مكتوب بالنتائج والتشخيص", "A written report of findings and diagnosis"), O("recs", "توصيات تساعدنا في خطة النطق واللغة", "Recommendations for our speech and language plan"),
     O("call", "تواصل مع الأخصائي المحوِّل لمناقشة الحالة", "A call with the referring therapist to discuss the case")];
 
+  const CONTACT = [O("c_phone", "هاتف المركز", "Center phone"), O("c_whatsapp", "واتساب المركز", "Center WhatsApp"), O("c_email", "إيميل المركز", "Center email"),
+    O("c_address", "عنوان المركز", "Center address"), O("t_email", "إيميل الأخصائي", "Therapist email"), O("guardian", "هاتف ولي الأمر", "Guardian phone")];
+
   const form = {
     kind: "referral",
     noNextDue: true,
@@ -80,9 +83,14 @@
         { id: "attach", type: "multi", label: L("المرفقات", "Attached"), options: ATTACH },
         { id: "reply", type: "multi", label: L("نرجو إعادة", "Please send back"), options: RETURN },
       ] },
+      { id: "contact", title: L("بيانات التواصل", "Contact details"), fields: [
+        { id: "contact", type: "multi", label: L("اللي بيطلع بالتحويل (تنسحب من بيانات المركز وملف الطفل)", "Shown on the referral (taken from the center and the child's file)"), options: CONTACT },
+        { id: "contact_direct", type: "text", label: L("رقم مباشر / تحويلة للأخصائي (اختياري)", "Direct number / extension for the therapist (optional)") },
+        { id: "contact_hours", type: "text", label: L("أوقات التواصل (اختياري)", "Contact hours (optional)"), suggest: [L("الأحد – الخميس، 8 صباحاً – 4 مساءً", "Sunday – Thursday, 8 am – 4 pm")] },
+      ] },
     ],
 
-    defaults() { return { urgency: "routine", request: ["assess"], attach: ["eval"], reply: ["report", "recs"] }; },
+    defaults() { return { urgency: "routine", request: ["assess"], attach: ["eval"], reply: ["report", "recs"], contact: ["c_phone", "c_email", "t_email", "guardian"] }; },
 
     generate(d, ctx) {
       const lang = ctx.lang, ar = lang === "ar", pc = ctx.pc, p = ctx.patient, G = (s) => gx(s, pc);
@@ -119,6 +127,21 @@
         if (att.length) out.push(`- **${ar ? "مرفق" : "Attached"}:** ${lblMany(ATTACH, att, lang, pc).join(ar ? "، " : ", ")}`);
         if (rep.length) out.push(`- **${ar ? "نرجو إعادة" : "Please send back"}:** ${rep.join(ar ? "، " : ", ")}`);
       }
+
+      // contact details
+      const cc = ctx.contact || {}, sel = d.contact || [], rows = [];
+      // keep phone numbers left-to-right inside Arabic lines (+971 56 … would otherwise flip)
+      const ltr = (v) => String(v || "").replace(/[+]?[\d][\d\s()-]{5,}[\d]/g, (m) => "\u202A" + m + "\u202C");
+      const add = (k, label, v) => { if (sel.includes(k) && String(v || "").trim()) rows.push(`${label}: ${ltr(v)}`); };
+      add("c_phone", ar ? "هاتف المركز" : "Center phone", cc.phone);
+      add("c_whatsapp", ar ? "واتساب المركز" : "Center WhatsApp", cc.whatsapp);
+      add("c_email", ar ? "إيميل المركز" : "Center email", cc.email);
+      add("t_email", ar ? "إيميل الأخصائي" : "Therapist email", ctx.therapistEmail);
+      if ((d.contact_direct || "").trim()) rows.push(`${ar ? "رقم الأخصائي المباشر" : "Therapist direct line"}: ${ltr(d.contact_direct.trim())}`);
+      add("guardian", ar ? "هاتف ولي الأمر" : "Guardian phone", [p.guardian_name, p.phone].filter(Boolean).join(" — ") && p.phone ? `${p.phone}${p.guardian_name ? ` (${p.guardian_name})` : ""}` : "");
+      add("c_address", ar ? "عنوان المركز" : "Center address", cc.address);
+      if ((d.contact_hours || "").trim()) rows.push(`${ar ? "أوقات التواصل" : "Contact hours"}: ${G(d.contact_hours.trim())}`);
+      if (rows.length) out.push("", "## " + (ar ? "بيانات التواصل" : "Contact details"), "::grid2", ...rows);
 
       out.push("", ar ? "شاكرين تعاونكم، ونرحب بالتواصل لأي استفسار." : "Thank you for your cooperation; please contact us with any questions.");
       // signatures side by side: referring therapist on the right, center manager on the left (Arabic)

@@ -211,6 +211,26 @@
 
   const NUMS = (arr) => arr.map((n) => O(String(n), String(n), String(n)));
 
+  // Fixed text of "الرعاية الحرجة وخطة الطوارئ" — identical in every plan
+  const CC_TEXT = {
+    ar: [
+      "**استمرارية الخدمة والبدائل المتاحة:** في حال تعذّر تقديم الجلسات كما هو مخطط لها (مرض {الطفل|الطفلة} أو غيابه، غياب الأخصائي أو إجازته، إغلاق المركز، أو أي ظرف طارئ)، يوفّر المركز البدائل التالية حسب الحاجة والإمكانية: جلسات تعويضية خلال مدة الخطة، أو أخصائي بديل مؤهل يطّلع على هذه الخطة قبل الجلسة، أو جلسات عن بُعد، أو برنامج منزلي مكتوب مع متابعة هاتفية وإرشاد مباشر لولي الأمر، بحيث يستمر العمل على الأهداف نفسها دون انقطاع.",
+      "**الطوارئ الطبية أثناء الجلسة:** عند حدوث أي حالة طارئة (اختناق أو صعوبة في التنفس، نوبة تشنج، رد فعل تحسسي، إصابة جسدية، أو تدهور صحي مفاجئ) تُوقف الجلسة فوراً، ويقدّم الكادر المدرّب الإسعافات الأولية، ويُستدعى الطاقم الطبي في المركز، ويُطلب الإسعاف (998) عند الحاجة، مع إبلاغ ولي الأمر فوراً وتوثيق الحادثة في تقرير حادث رسمي وفق سياسات المركز.",
+      "**الأزمات السلوكية:** عند ظهور سلوك قد يعرّض {الطفل|الطفلة} أو غيره للخطر، تُطبَّق إجراءات التهدئة والتعامل الآمن المعتمدة في المركز، وتُوقف المهام مؤقتاً حتى استقرار الحالة، ويُبلَّغ ولي الأمر، وتُناقَش الحاجة إلى تعديل الخطة أو إشراك أخصائي السلوك.",
+      "**السلامة في الأنشطة الفموية والتغذية:** تُستخدم فقط المواد والقوامات المناسبة {للطفل|للطفلة}، مع الالتزام بأي حساسية غذائية أو تعليمات طبية مسجلة في ملفه، ولا يُقدَّم أي طعام خلال الجلسات دون موافقة ولي الأمر.",
+      "**عدم الاستجابة أو التراجع:** إذا لم يظهر تقدم ملموس خلال فترتي مراجعة متتاليتين، أو ظهر تراجع في المهارات، تُراجَع الأهداف والاستراتيجيات وكثافة الخدمة، ويُنظر في إجراء تقييم إضافي أو التحويل إلى تخصص آخر بالتنسيق مع ولي الأمر.",
+      "**التواصل في الحالات الطارئة:** يتواصل المركز مع ولي الأمر عبر بيانات الاتصال المسجلة في ملف {الطفل|الطفلة}، ويلتزم ولي الأمر بتحديث بياناته وإبلاغ المركز بأي تغيّر في الحالة الصحية أو الأدوية.",
+    ],
+    en: [
+      "**Continuity of service and available alternatives:** if sessions cannot be delivered as planned (the child's illness or absence, the therapist's absence or leave, center closure, or any emergency), the center provides the following alternatives as needed and feasible: make-up sessions within the plan period, a qualified substitute therapist who reviews this plan before the session, remote (tele-therapy) sessions, or a written home program with phone follow-up and direct parent guidance, so that work on the same goals continues without interruption.",
+      "**Medical emergencies during a session:** in any emergency (choking or breathing difficulty, seizure, allergic reaction, physical injury, or sudden deterioration) the session is stopped immediately, trained staff provide first aid, the center's medical staff are called, an ambulance (998) is requested when needed, the guardian is informed immediately, and the incident is documented in an official incident report according to center policy.",
+      "**Behavioral crises:** if a behavior may put the child or others at risk, the center's approved de-escalation and safe-handling procedures are applied, tasks are paused until the child is settled, the guardian is informed, and the need to adjust the plan or involve a behavior specialist is discussed.",
+      "**Safety in oral-motor and feeding activities:** only materials and textures suitable for the child are used, any food allergy or medical instruction recorded in the file is followed, and no food is given during sessions without the guardian's consent.",
+      "**No response or regression:** if no meaningful progress is seen over two consecutive review periods, or skills regress, the goals, strategies and service intensity are reviewed, and further assessment or referral to another specialty is considered in coordination with the guardian.",
+      "**Communication in emergencies:** the center contacts the guardian using the contact details recorded in the child's file; the guardian keeps these details up to date and informs the center of any change in health status or medication.",
+    ],
+  };
+
   const form = {
     kind: "plan",
     DOMAINS, LTG_SKILLS, STG_BANK, MATERIALS, STRATEGIES, REINF, EVAL, CRIT_AR, CRIT_EN, evalText,
@@ -336,20 +356,23 @@
         out.push(`- المتابعة الدورية: توثيق حالة كل هدف قصير المدى في تقرير التقدم الداخلي، ومراجعة ${rev} لنسب الإنجاز.`);
         out.push(`- تاريخ إعادة التقييم: ${dmy(ctx.endDate)}، ولا يُعمل بهذه الخطة بعد هذا التاريخ دون إعادة تقييم وتحديث معتمدين.`);
         out.push(`- مؤشر الإتقان المعتمد: يُعدّ الهدف متحققاً عند بلوغ المعيار الرقمي المحدد في ${ms === "2" ? "جلستين متتاليتين" : ms + " جلسات متتالية"} على الأقل.`);
-        out.push("- أقر أنا الموقع أدناه بأن الخطة الفردية الخاصة بالمستفيد قد تمت مناقشتها وشرحها لي بطريقة واضحة ومفهومة، وأنني فهمت الأهداف والخدمات والتدخلات المقترحة وآلية المتابعة والمراجعة، وأتيحت لي الفرصة للمشاركة وطرح الأسئلة. وبناءً عليه، أوافق على تنفيذ الخطة الفردية الحالية وفقاً لما تم شرحه ومناقشته.");
       } else {
         out.push(`- Plan duration: (${months}) months, from ${dmy(ctx.startDate)} to ${dmy(ctx.endDate)}.`);
         out.push(`- Periodic follow-up: the status of each short-term goal is documented in the internal progress report, with a ${rev} review of achievement rates.`);
         out.push(`- Re-evaluation date: ${dmy(ctx.endDate)}; this plan is not to be used after this date without an approved re-evaluation and update.`);
         out.push(`- Mastery criterion: a goal is considered achieved when the specified numeric criterion is met in at least ${ms} consecutive sessions.`);
-        out.push("- I, the undersigned, confirm that the individualized plan has been discussed and explained to me clearly; I understand the goals, services, proposed interventions, and the follow-up and review process, and I had the opportunity to participate and ask questions. I therefore agree to the implementation of this plan as explained.");
       }
+      // Critical care and contingency plan: fixed text, always included and not editable, right before the signatures
+      out.push("", "## " + (ar ? "الرعاية الحرجة وخطة الطوارئ:" : "Critical Care and Contingency Plan:"));
+      CC_TEXT[ar ? "ar" : "en"].forEach((t) => out.push("- " + G(t)));
       // Signatures
       const today = dmy(ctx.reportDate || ctx.startDate);
       out.push("", ar ? "**إعــــداد:**" : "**Prepared by:**");
       out.push(ar ? "| التخصص | الاسم | التوقيع |" : "| Specialty | Name | Signature |");
       out.push(ar ? `| أخصائي النطق واللغة | ${ctx.therapistName || ""} | [[SIG]] |` : `| Speech and Language Pathologist | ${ctx.therapistName || ""} | [[SIG]] |`);
       out.push("", ar ? "**اعتماد وموافقة الخطة الفردية**" : "**Plan approval and consent**");
+      out.push(ar ? "أقر أنا الموقع أدناه بأن الخطة الفردية الخاصة بالمستفيد قد تمت مناقشتها وشرحها لي بطريقة واضحة ومفهومة، بما في ذلك بند الرعاية الحرجة وخطة الطوارئ، وأنني فهمت الأهداف والخدمات والتدخلات المقترحة وآلية المتابعة والمراجعة، وأتيحت لي الفرصة للمشاركة وطرح الأسئلة. وبناءً عليه، أوافق على تنفيذ الخطة الفردية الحالية وفقاً لما تم شرحه ومناقشته."
+        : "I, the undersigned, confirm that the individualized plan, including the critical care and contingency section, has been discussed and explained to me clearly; I understand the goals, services, proposed interventions, and the follow-up and review process, and I had the opportunity to participate and ask questions. I therefore agree to the implementation of this plan as explained.");
       out.push(ar ? "| الصفة / الاسم | التوقيع | التاريخ |" : "| Role / Name | Signature | Date |");
       out.push(ar ? `| الأخصائي المعالج: ${ctx.therapistName || ""} | [[SIG]] | ${today} |` : `| Treating therapist: ${ctx.therapistName || ""} | [[SIG]] | ${today} |`);
       out.push(ar ? `| ولي الأمر / الوصي (الاسم وصلة القرابة): ${d.guardian || ctx.patient.guardian_name || "……………"} |  | ${today} |` : `| Parent / guardian (name and relationship): ${d.guardian || ctx.patient.guardian_name || "……………"} |  | ${today} |`);

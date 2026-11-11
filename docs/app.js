@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-09b</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-11e</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -1207,6 +1207,7 @@
       const c = centerById(rec.center); const p = planRec();
       return { lang: l, pc: pcFor(l), patient, therapistName: clinicianName(therapistRec(), l), reportDate: d10(isPlan ? rec.start_date : rec.report_date),
         startDate: d10(rec.start_date), endDate: d10(rec.end_date), centerShort: shortCenter(c, l), centerFull: fullCenter(c, l), supervisor: c ? ((l === "en" && c.supervisor_name_en) || c.supervisor_name) : "",
+        contact: c ? { phone: c.phone || "", whatsapp: c.whatsapp || "", email: c.email || "", address: c.address || "" } : {}, therapistEmail: (therapistRec() || {}).email || "", therapistPhone: (therapistRec() || {}).phone || "",
         reeval: rec.report_type === "تقرير إعادة تقييم", planGoals: planGoals(l), planStart: p ? d10(p.start_date) : "", planEnd: p ? d10(p.end_date) : "", planData: p ? p.plan_data : null };
     };
     const genText = () => {
