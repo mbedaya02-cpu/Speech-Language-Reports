@@ -71,7 +71,7 @@
     const age = ageParts(patient.dob, atIso);
     const student = age && age.y >= 6;
     const C = lang === "ar" ? (student ? (female ? "الطالبة" : "الطالب") : (female ? "الطفلة" : "الطفل")) : first;
-    return { female, first, full, C, age: ageString(patient.dob, atIso, lang) };
+    return { female, first, full, C, age: ageString(patient.dob, atIso, lang), months: age ? age.total : null };
   }
 
   // Replace placeholders in a template string.

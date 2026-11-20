@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-20</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-20b</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -914,8 +914,9 @@
     }
 
     const sections = form.sections;
-    const sideHtml = sections.map((s, i) => `<a href="javascript:void 0" data-jump="${s.id}"><span>${esc(tx(s.title))}</span><span class="cnt" data-cnt="${s.id}"></span></a>`).join("") + `<a href="javascript:void 0" data-jump="doc"><span>النص النهائي والتصدير</span></a>`;
-    const formHtml = sections.map((s, i) => `<div class="panel" id="s-${s.id}"><div class="panel-head"><h2 class="section-title grow"><span class="n">${i + 1}</span>${esc(tx(s.title))}</h2>${s.title.en && UI !== "en" ? `<span class="hint" dir="ltr">${esc(s.title.en)}</span>` : ""}</div>
+    const secHid = (s) => (s.show && !s.show(data) ? " hidden" : "");
+    const sideHtml = sections.map((s, i) => `<a href="javascript:void 0" class="${secHid(s).trim()}" data-jump="${s.id}" data-sid="${s.id}"><span>${esc(tx(s.title))}</span><span class="cnt" data-cnt="${s.id}"></span></a>`).join("") + `<a href="javascript:void 0" data-jump="doc"><span>النص النهائي والتصدير</span></a>`;
+    const formHtml = sections.map((s, i) => `<div class="panel${secHid(s)}" id="s-${s.id}"><div class="panel-head"><h2 class="section-title grow"><span class="n">${i + 1}</span>${esc(tx(s.title))}</h2>${s.title.en && UI !== "en" ? `<span class="hint" dir="ltr">${esc(s.title.en)}</span>` : ""}</div>
       <div class="panel-body">${s.fields.map(renderField).join("")}</div></div>`).join("");
 
     const title = isPlan ? (id === "new" ? (rec.previous ? "تجديد الخطة التربوية الفردية" : "خطة تربوية فردية جديدة") : "الخطة التربوية الفردية") : rec.report_type;
@@ -976,6 +977,15 @@
     main.querySelectorAll("[data-jump]").forEach((a) => a.onclick = () => main.querySelector("#s-" + a.dataset.jump).scrollIntoView({ behavior: "smooth", block: "start" }));
 
     function refreshShow() {
+      // whole sections that depend on an answer (e.g. the age group of the initial scanning report); visible ones are renumbered
+      if (sections.some((s) => s.show)) {
+        let k = 0;
+        sections.forEach((s) => {
+          const vis = !s.show || s.show(data), el = main.querySelector("#s-" + s.id), a = main.querySelector(`[data-sid="${s.id}"]`);
+          if (el) { el.classList.toggle("hidden", !vis); if (vis) { const nEl = el.querySelector(".section-title .n"); if (nEl) nEl.textContent = ++k; } }
+          if (a) a.classList.toggle("hidden", !vis);
+        });
+      }
       Object.values(fieldsById).forEach((f) => { if (!f.show) return; const el = formRoot.querySelector(`[data-fid="${f.id}"]`); if (el) el.classList.toggle("hidden", !f.show(data)); });
       // matrix rows with a note box that opens only for one answer (e.g. "غير سليم")
       Object.values(fieldsById).forEach((f) => { if (!f.noteWhen) return; f.rows.forEach((r) => {
@@ -993,6 +1003,7 @@
         el.textContent = `${n}/${fs.length}`; el.classList.toggle("done", n === fs.length);
       });
     }
+    refreshShow();
     updateCounts();
 
     // suggestions (append text in the current document language)
