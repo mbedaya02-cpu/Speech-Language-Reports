@@ -21,7 +21,11 @@ var SCHEMA = {
   reports:      ['patient', 'center', 'report_type', 'report_date', 'next_due', 'status', 'therapist'],
   audit_log:    ['user_name', 'action', 'collection_name', 'record_id', 'label', 'ip'],
   app_settings: ['system_name', 'remind_before', 'remind_after', 'notify_emails'],
-  signatures:   ['user', 'has_signature', 'has_stamp'],  // therapist signature / stamp images (not exposed through the generic API)
+  signatures:   ['user', 'has_signature', 'has_stamp'],
+  // Documentation quality audits (admins write; a therapist reads only his own submitted audits)
+  soap_notes:   ['patient', 'center', 'therapist', 'date', 'attendance', 'plan'],   // session notes (SOAP)
+  qa_audits:    ['therapist', 'center', 'month', 'status', 'total', 'auditor_name'],
+  qa_actions:   ['audit', 'therapist', 'status', 'due_date', 'issue'],  // therapist signature / stamp images (not exposed through the generic API)
 };
 var CHUNK = 45000;          // characters per _json cell
 var CACHE_PIECE = 25000;    // characters per CacheService value (limit 100 KB)

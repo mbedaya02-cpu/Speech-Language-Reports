@@ -9,10 +9,13 @@
 
 var RELATIONS = {
   patients: { center: 'centers', therapists: 'users' },
-  plans: { patient: 'patients', center: 'centers', therapist: 'users', previous: 'plans' },
-  reports: { patient: 'patients', center: 'centers', therapist: 'users', plan: 'plans', previous: 'reports' },
+  plans: { patient: 'patients', center: 'centers', therapist: 'users', previous: 'plans', author: 'users', last_editor: 'users' },
+  reports: { patient: 'patients', center: 'centers', therapist: 'users', plan: 'plans', previous: 'reports', author: 'users', last_editor: 'users' },
   users: { centers: 'centers' },
   audit_log: { user: 'users' },
+  soap_notes: { patient: 'patients', center: 'centers', therapist: 'users', plan: 'plans' },
+  qa_audits: { therapist: 'users', center: 'centers', auditor: 'users' },
+  qa_actions: { therapist: 'users', audit: 'qa_audits' },
 };
 
 var Filter = (function () {

@@ -25,6 +25,7 @@ function dueItems_(aheadDays) {
   Db.all('reports').forEach(function (r) {
     if (r.followed_up !== true && r.next_due && r.next_due <= limit) items.push({ kind: 'report', rec: r, due: String(r.next_due).slice(0, 10), type: 'تقرير مستحق (بعد ' + r.report_type + ')' });
   });
+  progressDue_(today, limit, items).forEach(function (x) { items.push(x); });
   return items.map(function (i) {
     var p = Db.get('patients', i.rec.patient) || {};
     i.patient = p; i.daysLeft = daysBetween_(today, i.due);
@@ -88,4 +89,29 @@ function dailyReminders() {
 function installReminderTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'dailyReminders') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('dailyReminders').timeBased().everyDays(1).atHour(8).create();
+}
+
+/**
+ * Mandatory progress report every 6 months: for every active plan, a progress report is due 6 months after
+ * the later of the plan start and the last progress report. Skipped when the plan itself ends first
+ * (its renewal / re-evaluation is the reminder) or when a report reminder already covers that child.
+ * Same rule as loadDueItems() in the website.
+ */
+var PROGRESS_TYPE = 'تقرير تقييم مرحلي';
+function progressDue_(today, limit, items) {
+  var out = [], lastProg = {};
+  Db.all('reports').forEach(function (r) {
+    if (r.report_type === PROGRESS_TYPE && r.report_date && (!lastProg[r.patient] || r.report_date > lastProg[r.patient])) lastProg[r.patient] = String(r.report_date).slice(0, 10);
+  });
+  var covered = {}; items.forEach(function (i) { if (i.kind === 'report') covered[i.rec.patient] = true; });
+  Db.all('plans').forEach(function (pl) {
+    if (pl.status !== 'سارية' || !pl.start_date || covered[pl.patient]) return;
+    var start = String(pl.start_date).slice(0, 10), base = lastProg[pl.patient] && lastProg[pl.patient] > start ? lastProg[pl.patient] : start;
+    var d = new Date(base + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + 6); var due = d.toISOString().slice(0, 10);
+    if (due + ' 00:00:00.000Z' > limit) return;
+    if (pl.end_date && due >= String(pl.end_date).slice(0, 10)) return;
+    covered[pl.patient] = true;
+    out.push({ kind: 'progress', rec: pl, due: due, type: 'تقرير تقييم مرحلي إلزامي (كل 6 أشهر)' });
+  });
+  return out;
 }
