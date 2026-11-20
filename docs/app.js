@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-20b</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-20c</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -1343,6 +1343,12 @@
     }
 
     // ----- save
+    // key of a new (not yet saved) document, kept for this tab until the save succeeds
+    let savedNewId = null;
+    const nkStore = "newkey:" + (draftKey || `${coll}:${patient.id}`);
+    const newKey = () => { let k = ""; try { k = sessionStorage.getItem(nkStore) || ""; } catch (_) {}
+      if (!k) { k = Date.now().toString(36) + Math.random().toString(36).slice(2, 10); try { sessionStorage.setItem(nkStore, k); } catch (_) {} } return k; };
+    const dropNewKey = () => { try { sessionStorage.removeItem(nkStore); } catch (_) {} };
     const save = main.querySelector("#save");
     // a saved document: «حفظ» opens only after something was changed
     if (save && id !== "new") {
@@ -1376,8 +1382,20 @@
         }
         payload.therapist = rec.therapist;
         payload = filePayload(root, fstate, payload);
-        if (id === "new" && rec.previous) payload.previous = rec.previous;
-        const saved = id === "new" ? await pb.collection(coll).create(payload) : await pb.collection(coll).update(id, payload);
+        // a new document: one key for this editor, so saving again (lost reply, double click, reload) never makes a second copy
+        let target = id !== "new" ? id : savedNewId;
+        if (!target) {
+          payload.client_key = newKey();
+          if (rec.previous) payload.previous = rec.previous;
+          // the same kind of document was already saved today for this child: edit that one instead of making a new file?
+          if (!rec.previous) {
+            const same = await pb.collection(coll).getFullList({ filter: isPlan ? pb.filter("patient = {:p}", { p: patient.id }) : pb.filter("patient = {:p} && report_type = {:t}", { p: patient.id, t: rec.report_type }), sort: "-created" }).catch(() => []);
+            const mine = same.find((x) => d10(x.created) === today() && !x.uploaded && (x.author === S.me.id || x.last_editor === S.me.id || x.therapist === S.me.id));
+            if (mine && confirm(`في «${isPlan ? (mine.plan_type || "خطة") : rec.report_type}» لهالطفل انحفظ اليوم.\n\nبدك تحفظ التعديلات عليه نفسه بدل ما ينعمل ملف جديد؟\n\nموافق = تعديل الملف المحفوظ   ·   إلغاء = ملف جديد منفصل`)) { target = mine.id; delete payload.client_key; }
+          }
+        }
+        const saved = target ? await pb.collection(coll).update(target, payload) : await pb.collection(coll).create(payload);
+        savedNewId = saved.id; dropNewKey();
         clearDraft(); dirty = false; toast("تم الحفظ ✓");
         if (id === "new") { history.replaceState(null, "", `#/${isPlan ? "plan" : "report"}/${saved.id}`); lastHash = location.hash; }
         route();
