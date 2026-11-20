@@ -19,7 +19,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-11e</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-20</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -420,13 +420,13 @@
   }
 
   function patientModal(p, done) {
-    // A therapist adds patients only to their own centers, and is assigned to them automatically.
-    const myCenters = isTherapist() && (S.me.centers || []).length ? S.centers.filter((c) => S.me.centers.includes(c.id)) : S.centers;
-    const defCenter = myCenters.some((c) => c.id === S.centerFilter) ? S.centerFilter : (myCenters[0] && myCenters[0].id);
-    p = p || { status: "نشط", center: defCenter, therapists: [] };
+    // A therapist may add a patient to either center (he chooses it explicitly) and is assigned to them automatically.
+    const pickCenter = !p && isTherapist();
+    const defCenter = S.centers.some((c) => c.id === S.centerFilter) ? S.centerFilter : (S.centers[0] && S.centers[0].id);
+    p = p || { status: "نشط", center: pickCenter ? "" : defCenter, therapists: [] };
     const canAssign = isAdmin() || S.me.role === "reception";
     const body = `<div class="grid cols-2">
-      <div class="field"><label class="f">المركز *</label><select class="input" name="center">${(p.id ? S.centers : myCenters).map((c) => `<option value="${c.id}" ${p.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">المركز *</label><select class="input" name="center">${pickCenter ? `<option value="">— اختر المركز: بداية أو ألباين —</option>` : ""}${S.centers.map((c) => `<option value="${c.id}" ${p.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
       <div class="field"><label class="f">رقم الملف</label><input class="input mono" name="file_no" value="${esc(p.file_no)}" placeholder="فارغ = رقم مؤقت تلقائي (TMP-…)"></div>
       <div class="field"><label class="f">الاسم بالعربي *</label><input class="input" name="full_name" value="${esc(p.full_name)}"></div>
       <div class="field"><label class="f">الاسم بالإنجليزي (للتقارير الإنجليزية)</label><input class="input" dir="ltr" name="full_name_en" value="${esc(p.full_name_en)}"></div>
@@ -453,6 +453,7 @@
         ["center", "file_no", "full_name", "full_name_en", "gender", "nationality", "guardian_name", "phone", "insurance_company", "insurance_no", "diagnosis", "status", "notes"].forEach((k) => data[k] = val(root, k));
         data.dob = toPb(val(root, "dob")); data.start_date = toPb(val(root, "start_date")); data.eval_date = toPb(val(root, "eval_date"));
         if (canAssign) data.therapists = [...root.querySelectorAll("#thr .chip.on")].map((c) => c.dataset.id);
+        if (!data.center) { toast("اختر المركز اللي بينضاف عليه الطفل (بداية أو ألباين).", true); return false; }
         if (!data.full_name || !data.gender) { toast("الاسم والجنس مطلوبان (الجنس يحدد صياغة التقارير)", true); return false; }
         if (!data.file_no && !confirm("هل أنت متأكد أنه لا يوجد رقم ملف فعلي للطفل في المركز؟\n\nإذا ضغطت «موافق» سيُعطى الطفل رقماً مؤقتاً تلقائياً حسب التسلسل (TMP-…)، وتقدر تعدّله لاحقاً.")) return false;
         const rec = p.id ? await pb.collection("patients").update(p.id, data) : await pb.collection("patients").create(data);
