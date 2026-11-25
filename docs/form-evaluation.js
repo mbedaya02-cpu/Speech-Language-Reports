@@ -330,8 +330,9 @@
       out.push(G(ar ? "استنادًا لمجريات جلسة التقييم وخبرتنا المهنية، والفحوصات المباشرة وغير المباشرة، آخذين بعين الاعتبار إفادة وملاحظات الأهل، نستخلص بأن ({N}) {وعمره|وعمرها} {AGE}، {يبدي|تبدي} أعراضاً تتوافق مع:"
         : "Based on the course of the assessment session, our professional experience, and direct and indirect examinations, and taking into account the parents' report and observations, we conclude that ({N}), aged {AGE}, shows symptoms consistent with:"));
       const dx = diagnosis(d);
-      if (ar) { if (dx.ar) out.push(`^^ ${dx.ar}`); if (dx.en) out.push(`^^ ${dx.en}`); }
-      else if (dx.en) out.push(`^^ ${dx.en}`);
+      // one language only: the Arabic report shows the Arabic wording, the English report the English one
+      const dxt = ar ? dx.ar || dx.en : dx.en || dx.ar;
+      if (dxt) out.push(`^^ ${dxt}`);
 
       // 8. prognosis
       out.push("", "## " + (ar ? "ثامناً: احتمالية التحسن:" : "Eighth: Prognosis:"));

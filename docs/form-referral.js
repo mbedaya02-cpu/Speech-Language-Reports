@@ -97,7 +97,7 @@
       const to = d.to === "other" ? (d.to_other || "") : lbl(TO, d.to, lang, pc);
       const toFull = [to, (d.to_name || "").trim()].filter(Boolean).join(" — ");
       const req = lblMany(REQUEST, d.request || [], lang, pc).map((r, i) => ((d.request || [])[i] === "test" && d.test_name ? `${r} (${d.test_name})` : r));
-      const out = ["# " + (ar ? "نموذج تحويل (Referral)" : "Referral Form")];
+      const out = ["# " + (ar ? "نموذج تحويل" : "Referral Form")];
       if (ctx.centerFull) out.push("^^ " + ctx.centerFull + (ar ? " — قسم النطق واللغة" : " — Speech and Language Department"));
       out.push("", "::info4");
       if (ar) out.push(`الاسم: ${pc.full}`, `رقم الملف: ${p.file_no || ""}`, `تاريخ الميلاد: ${dmy(p.dob)}`, `العمر: ${pc.age}`,

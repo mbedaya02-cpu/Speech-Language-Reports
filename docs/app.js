@@ -3,10 +3,12 @@
   "use strict";
   // Backend URL: ?api=… in the address (this tab), or chosen on the connect screen (this browser), or config.js.
   const API_KEY = "sr_api_url";
-  const qApi = new URLSearchParams(location.search).get("api");
+  // lockApi (config.js): an internal installation always uses its own server; the address bar and the connect screen cannot change it.
+  const LOCKED = !!(window.APP_CONFIG && window.APP_CONFIG.lockApi && window.APP_CONFIG.apiUrl);
+  const qApi = LOCKED ? "" : new URLSearchParams(location.search).get("api");
   if (qApi) { try { sessionStorage.setItem(API_KEY, qApi); } catch (_) {} history.replaceState(null, "", location.pathname + location.hash); }
   const stored = (st) => { try { return st.getItem(API_KEY) || ""; } catch (_) { return ""; } };
-  let API_URL = qApi || stored(sessionStorage) || stored(localStorage) || (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || "";
+  let API_URL = LOCKED ? window.APP_CONFIG.apiUrl : (qApi || stored(sessionStorage) || stored(localStorage) || (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || "");
   const pb = new GasPB(API_URL);
   pb.autoCancellation(false);
 
@@ -19,7 +21,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-20c</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-25b</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -955,6 +957,7 @@
           <div id="formRoot">${formHtml}</div>
           <div class="panel" id="s-doc"><div class="panel-head"><h2 class="grow">النص النهائي والتصدير</h2><span class="hint">راجع النص وعدّله بحرية قبل الحفظ</span></div><div class="panel-body">
             <details class="hint" style="margin-bottom:8px"><summary>رموز التنسيق في النص</summary># عنوان · ## عنوان قسم · ### عنوان فرعي مسطّر · - نقطة · 1. ترقيم · **عريض** · ^^ سطر في الوسط · | جدول | · ::info2 / ::info4 / ::grid2 جداول البيانات · ::box فقرة بخلفية خفيفة · ### {g} / {a} / {b} عنوان ملوّن (أخضر / كهرماني / أزرق رمادي)</details>
+            <div id="langWarn" class="note-box hidden" style="background:var(--warn-soft);color:var(--warn);margin-bottom:8px"></div>
             <textarea class="input doc" id="docText" placeholder="اختر الإجابات أعلاه ثم اضغط «توليد النص»…">${esc(isPlan ? rec.plan_text : rec.report_text)}</textarea>
             ${id !== "new" ? filesBlock(rec, coll) : ""}
           </div>
@@ -1054,7 +1057,10 @@
     function renderGoalsEditor() {
       const box = formRoot.querySelector("#goalsEditor"); if (!box) return;
       const pc = pcFor(lang);
-      const txt = (o) => (o ? (o[lang] || o[lang === "ar" ? "en" : "ar"] || "") : "");
+      // only the document's language is shown and edited; the text in the other language is a hint to translate it
+      const txt = (o) => (o ? (o[lang] || "") : "");
+      const oth = (o) => (o ? (o[lang === "ar" ? "en" : "ar"] || "") : "");
+      const trHint = (o) => (txt(o).trim() || !oth(o).trim() ? "" : `<div class="hint" style="color:var(--warn)">${lang === "en" ? "⚠ This goal has no English text yet. Arabic: " : "⚠ هذا الهدف ما إله نص عربي. الإنجليزي: "}<span dir="auto">${esc(oth(o))}</span></div>`);
       box.innerHTML = (data.blocks.length ? "" : `<div class="note-box" style="margin-bottom:10px">ابدأ بإضافة هدف عام (مجال)، ثم اختر الهدف طويل المدى، ثم أضف الأهداف قصيرة المدى من البنك أو اكتبها.</div>`)
         + (() => { let dom = 0, n = 0; return data.blocks.map((b, bi) => {
           // Several long-term goals can sit under one general goal (consecutive blocks with the same domain).
@@ -1071,7 +1077,7 @@
               <span class="grow"></span><button class="btn sm" data-bmv="${bi}:-1" title="تحريك لفوق">↑</button><button class="btn sm" data-bmv="${bi}:1" title="تحريك لتحت">↓</button><button class="btn sm danger" data-brm="${bi}">حذف هذا الهدف</button></div>
             <div class="panel-body">
               <label class="f">الهدف طويل المدى</label>
-              <textarea class="input" rows="2" data-b="${bi}" data-k="ltg" dir="${lang === "ar" ? "rtl" : "ltr"}">${esc(txt(b.ltg))}</textarea>
+              <textarea class="input" rows="2" data-b="${bi}" data-k="ltg" dir="${lang === "ar" ? "rtl" : "ltr"}">${esc(txt(b.ltg))}</textarea>${trHint(b.ltg)}
               ${skills.length ? `<details class="ltg-bank" ${!txt(b.ltg).trim() || last ? "open" : ""}><summary class="hint" style="cursor:pointer">اقتراحات أهداف طويلة المدى لهذا المجال (${skills.length}) — إذا الخانة معبّاية، الاقتراح بينضاف كهدف طويل جديد تحت نفس الهدف العام</summary>
                 <div class="chips sugg-row">${skills.map((s, i) => { const done = used.has(PF.ltgText(s, "ar", pcFor("ar")).trim()); return `<button type="button" class="chip sugg${done ? " on" : ""}" data-ltg="${bi}:${i}" ${done ? 'title="مستخدم"' : ""}>${done ? "" : "+ "}${esc(tx(s))}</button>`; }).join("")}</div></details>` : ""}
               <h3 style="margin:14px 0 8px">الأهداف قصيرة المدى</h3>
@@ -1081,7 +1087,7 @@
                 return `<div class="goal-row">
                   <div class="top"><span class="num">${si + 1}</span><span class="grow" style="flex:1"></span>${noNum ? `<span class="pill warn" title="بند C9: كل هدف قصير المدى يحتاج معياراً رقمياً">⚠ بدون معيار رقمي</span>` : ""}
                     <button class="btn sm" data-smv="${bi}:${si}:-1">↑</button><button class="btn sm" data-smv="${bi}:${si}:1">↓</button><button class="btn sm danger" data-srm="${bi}:${si}">حذف</button></div>
-                  <textarea class="input" rows="2" data-b="${bi}" data-s="${si}" data-k="text" dir="${lang === "ar" ? "rtl" : "ltr"}" placeholder="أن ${pc.C === "الطالبة" || pc.C === "الطفلة" ? "تـ…" : "يـ…"} ${esc(pc.C)} … بعدد 4 مرات صحيحة من أصل 5 محاولات">${esc(t)}</textarea>
+                  <textarea class="input" rows="2" data-b="${bi}" data-s="${si}" data-k="text" dir="${lang === "ar" ? "rtl" : "ltr"}" placeholder="أن ${pc.C === "الطالبة" || pc.C === "الطفلة" ? "تـ…" : "يـ…"} ${esc(pc.C)} … بعدد 4 مرات صحيحة من أصل 5 محاولات">${esc(t)}</textarea>${trHint(s)}
                   <div class="chips sugg-row"><button type="button" class="chip sugg" data-crit="${bi}:${si}">+ ${lang === "ar" ? PF.CRIT_AR : PF.CRIT_EN}</button><button type="button" class="chip sugg" data-crit2="${bi}:${si}">+ ${lang === "ar" ? "بنسبة إتقان 80%" : "with 80% accuracy"}</button></div>
                   <div class="grid cols-2" style="margin-top:8px">
                     <div><label class="f">المواد والأدوات اللازمة</label>${mc("materials", PF.MATERIALS)}</div>
@@ -1191,6 +1197,47 @@
     const cSel = top.querySelector('[data-path="center"]');
     if (cSel) cSel.addEventListener("change", () => setTimeout(renderTh, 0));
 
+    // ----- one language per document: what is still written in the other language (names, typed text, goals)
+    function langIssues() {
+      const l = lang, other = l === "en" ? "ar" : "en", out = [];
+      const foreign = (t) => FC.isForeign(FC.translate(FC.gx(String(t || ""), pcFor(l)), l, pcAr, pcFor("en")), l);
+      if (l === "en") {
+        if (!patient.full_name_en) out.push({ t: "اسم الطفل بالإنجليزي مش موجود: ملف الطفل ← تعديل ← الاسم بالإنجليزي." });
+        const th = therapistRec(); if (th && th.id && !th.name_en) out.push({ t: `اسم الأخصائي بالإنجليزي مش موجود (${th.name || ""}): ${th.id === S.me.id ? "«ملفي»" : "المستخدمون ← تعديل"}.` });
+        const c = centerById(rec.center); if (c && !c.name_en) out.push({ t: "اسم المركز بالإنجليزي مش موجود: الإعدادات ← المراكز." });
+      }
+      sections.forEach((sec) => {
+        if (sec.show && !sec.show(data)) return;
+        sec.fields.forEach((f) => {
+          if (f.show && !f.show(data)) return;
+          const lab = (f.label && (f.label.ar || f.label)) || (sec.title && sec.title.ar) || f.id, v = data[f.id];
+          if (["text", "textarea", "list"].includes(f.type) && typeof v === "string" && !f.ltr && foreign(v)) out.push({ t: `«${lab}»`, sel: `[data-path="${f.id}"]` });
+          if (f.type === "matrix" && v) (f.rows || []).forEach((r) => { const n = (v[r.v] || {}).note; if (n && foreign(n)) out.push({ t: `«${lab}» — ملاحظة «${r.ar}»`, sel: `[data-fid="${f.id}"]` }); });
+          if (f.type === "goals") (data.blocks || []).forEach((b, bi) => {
+            const chk = (o, name, sel) => { if (!o) return; const mine = (o[l] || "").trim(); if ((!mine && (o[other] || "").trim()) || (mine && foreign(mine))) out.push({ t: `${name}: ${mine ? "مكتوب باللغة الثانية" : (l === "en" ? "ما إله نص إنجليزي" : "ما إله نص عربي")}`, sel }); };
+            chk(b.ltg, `الهدف طويل المدى ${bi + 1}`, `[data-b="${bi}"][data-k="ltg"]`);
+            (b.stgs || []).forEach((st, si) => chk(st, `الهدف قصير المدى ${bi + 1}.${si + 1}`, `[data-b="${bi}"][data-s="${si}"][data-k="text"]`));
+          });
+          if (f.type === "plangoals") { const n = planGoals(l).filter((g) => foreign(g.text) || foreign(g.ltg)).length; if (n) out.push({ t: `${n} من أهداف الخطة المرتبطة ${l === "en" ? "ما إلها نص إنجليزي" : "ما إلها نص عربي"}: افتح الخطة، بدّل لغتها، واكتب الأهداف.` }); }
+        });
+      });
+      const typed = FC.foreignLines(docText.value, l).length;
+      return { list: out, lines: typed };
+    }
+    function showLangIssues() {
+      const box = main.querySelector("#langWarn"); if (!box) return;
+      const r = langIssues();
+      if (!r.list.length && !r.lines) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+      box.classList.remove("hidden");
+      box.innerHTML = `<strong>${lang === "en" ? "المستند إنجليزي — هدول لسا بالعربي:" : "المستند عربي — هدول لسا بالإنجليزي:"}</strong>
+        <ul style="margin:4px 0 0;padding-inline-start:18px">${r.list.map((x, i) => `<li>${x.sel ? `<a href="javascript:void 0" data-lw="${i}">${esc(x.t)}</a>` : esc(x.t)}</li>`).join("")}
+        ${r.lines && !r.list.length ? `<li>${r.lines} سطر بالنص النهائي (ترجمه بالخانة فوق ثم «توليد النص»، أو عدّله بالنص مباشرة)</li>` : ""}</ul>`;
+      box.querySelectorAll("[data-lw]").forEach((a) => a.onclick = () => {
+        const el = main.querySelector(r.list[+a.dataset.lw].sel); if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" }); el.style.outline = "2px solid var(--warn)"; setTimeout(() => { el.style.outline = ""; }, 2500); if (el.focus) el.focus();
+      });
+    }
+
     // ----- language toggle
     const langT = main.querySelector("#langT");
     function setLang(l) {
@@ -1199,10 +1246,26 @@
       docText.dir = l === "ar" ? "rtl" : "ltr";
       if (isPlan) renderGoalsEditor();
       refreshDyn();
+      setTimeout(showLangIssues, 0);   // after the editor has finished building (helpers defined below)
     }
     // Switching the document language rewrites the text in that language right away.
-    if (langT) langT.onclick = (e) => {
+    async function askEnglishNames() {
+      if (sandbox || readonly) return;
+      try {
+        if (!patient.full_name_en) {
+          const v = (prompt(`اسم الطفل بالإنجليزي مش موجود بملفه.\nاكتبه هون (بينحفظ بملف الطفل):\n\n${patient.full_name}`) || "").trim();
+          if (v) { await pb.collection("patients").update(patient.id, { full_name_en: v }); patient.full_name_en = v; toast("انحفظ الاسم بالإنجليزي بملف الطفل ✓"); }
+        }
+        const th = therapistRec();
+        if (th && th.id === S.me.id && !S.me.name_en) {
+          const v = (prompt(`اسمك بالإنجليزي مش موجود بملفك.\nاكتبه هون (بيطلع بالمستندات الإنجليزية):\n\n${S.me.name}`) || "").trim();
+          if (v) { await pb.collection("users").update(S.me.id, { name_en: v }); S.me.name_en = v; th.name_en = v; toast("انحفظ اسمك بالإنجليزي ✓"); }
+        }
+      } catch (err) { toast(errText(err), true); }
+    }
+    if (langT) langT.onclick = async (e) => {
       const b = e.target.closest("button"); if (!b || b.dataset.l === lang) return;
+      if (b.dataset.l === "en") await askEnglishNames();
       setLang(b.dataset.l); dirty = true;
       if (!docText.value.trim() || confirm(b.dataset.l === "en" ? "كتابة النص من جديد بالإنجليزي؟ (أي تعديل يدوي على النص الحالي رح ينمسح)" : "كتابة النص من جديد بالعربي؟ (أي تعديل يدوي على النص الحالي رح ينمسح)")) {
         docText.value = genText();
@@ -1231,11 +1294,9 @@
       }
       if (!sandbox && !rec.therapist) { toast("اختر اسم الأخصائي أولاً (من معالجي مركز المستند).", true); return docText.value; }
       let out = form.generate(data, ctxFor(lang));
-      if (lang === "en") {
-        out = FC.toEnglish(out, pcAr, pcFor("en"));
-        const left = FC.arabicLines(out);
-        if (left) toast(`تنبيه: ${left} سطر بالنص لسا بالعربي (نص مكتوب يدوياً). ترجمه بنفسك قبل التنزيل.`, true);
-      }
+      // known suggestions / options written in the other language are switched to their twin in the document's language
+      out = FC.translate(out, lang, pcAr, pcFor("en"));
+      setTimeout(showLangIssues, 0);
       return out;
     };
     const gen = main.querySelector("#gen");
@@ -1249,9 +1310,8 @@
       else {
         // English document but the text is still mostly Arabic (written before switching): offer to rewrite it.
         const total = docText.value.split("\n").filter((x) => x.trim()).length || 1;
-        const arabic = FC.arabicLines(docText.value);
-        if (lang === "en" && arabic / total > 0.3 && confirm("لغة المستند إنجليزي بس النص لسا عربي. كتابة النص بالإنجليزي قبل التنزيل؟")) { docText.value = genText(); dirty = true; }
-        if (lang === "ar" && arabic / total < 0.3 && confirm("لغة المستند عربي بس النص إنجليزي. كتابة النص بالعربي قبل التنزيل؟")) { docText.value = genText(); dirty = true; }
+        const foreign = FC.foreignLines(docText.value, lang).length;
+        if (foreign / total > 0.3 && confirm(lang === "en" ? "لغة المستند إنجليزي بس النص لسا عربي. كتابة النص بالإنجليزي قبل التنزيل؟" : "لغة المستند عربي بس النص إنجليزي. كتابة النص بالعربي قبل التنزيل؟")) { docText.value = genText(); dirty = true; }
       }
       return docText.value;
     };
@@ -1267,8 +1327,17 @@
         return true;
       };
       const exText = () => (sandbox ? ensureText() : docText.value);
-      main.querySelector("#wordBtn").onclick = () => { if (canExport()) exportDoc("docx", exText(), lang, rec.center, fname(), sigFrom()); };
-      main.querySelector("#pdfBtn").onclick = () => { if (canExport()) exportDoc("pdf", exText(), lang, rec.center, fname(), sigFrom()); };
+      // one language per document: list what is still in the other language before downloading
+      const langOk = (txt) => {
+        const lines = FC.foreignLines(txt, lang);
+        showLangIssues();
+        if (!lines.length) return true;
+        return confirm((lang === "en" ? `المستند إنجليزي، بس في ${lines.length} سطر لسا بالعربي:` : `المستند عربي، بس في ${lines.length} سطر لسا بالإنجليزي:`)
+          + "\n\n" + lines.slice(0, 6).map((l) => "• " + l.trim().slice(0, 90)).join("\n") + (lines.length > 6 ? "\n…" : "")
+          + "\n\nترجمها بالخانات أو بالنص النهائي (القائمة الصفراء فوق النص بتدلّك عليها).\n\nموافق = تنزيل هيك   ·   إلغاء = رجوع للتعديل");
+      };
+      main.querySelector("#wordBtn").onclick = () => { if (canExport()) { const t = exText(); if (langOk(t)) exportDoc("docx", t, lang, rec.center, fname(), sigFrom()); } };
+      main.querySelector("#pdfBtn").onclick = () => { if (canExport()) { const t = exText(); if (langOk(t)) exportDoc("pdf", t, lang, rec.center, fname(), sigFrom()); } };
       main.querySelector("#wordBtn").title = main.querySelector("#pdfBtn").title = sandbox ? "" : "التنزيل متاح بعد الحفظ";
     }
 
@@ -1662,7 +1731,7 @@
         sc.onerror = next;
         document.head.appendChild(sc);
       };
-      tryLoad("xlsx.full.min.js", () => tryLoad("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js", () => reject(new Error("تعذر تحميل مكتبة Excel"))));
+      tryLoad("xlsx.full.min.js", () => reject(new Error("تعذر تحميل مكتبة Excel")));   // served locally only (no external CDN)
     });
   }
   const IMPORT_FIELDS = [
@@ -1992,7 +2061,7 @@
       location.reload();
     };
   }
-  window.__changeServer = () => { try { localStorage.removeItem(API_KEY); sessionStorage.removeItem(API_KEY); } catch (_) {} pb.authStore.clear(); window.__forceConnect = true; renderConnect(); };
+  window.__changeServer = () => { if (LOCKED) return;  try { localStorage.removeItem(API_KEY); sessionStorage.removeItem(API_KEY); } catch (_) {} pb.authStore.clear(); window.__forceConnect = true; renderConnect(); };
 
   // ------------------------------------------------------------------ helpers shared with quality.js (documentation audits)
   window.APPX = {
