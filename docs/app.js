@@ -21,7 +21,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-26</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-26b</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -376,9 +376,11 @@
         ${now.length ? dueTable(now) : `<div class="empty">لا يوجد شيء مستحق الآن. 👌</div>`}</div>
       ${later.length ? `<div class="panel"><details><summary class="panel-head" style="cursor:pointer"><h2 class="grow">قادمة خلال 30 يوماً (${later.length})</h2></summary>${dueTable(later)}</details></div>` : ""}
       ${drafts.items.length ? `<div class="panel"><div class="panel-head"><h2 class="grow">تقارير مسودة لم تُعتمد</h2></div><div class="table-wrap"><table class="t"><tbody>
-        ${drafts.items.map((r) => `<tr class="click" data-go="#/report/${r.id}"><td>${esc(typeName(r.report_type))}</td><td>${esc(r.expand && r.expand.patient ? r.expand.patient.full_name : "")}</td><td class="nowrap">${d10(r.report_date)}</td><td>${statusPill(r.status)}</td></tr>`).join("")}
+        ${drafts.items.map((r) => `<tr class="click" data-go="#/report/${r.id}"><td>${esc(typeName(r.report_type))}</td><td>${esc(r.expand && r.expand.patient ? r.expand.patient.full_name : "")}</td><td class="nowrap">${d10(r.report_date)}</td><td>${reportStatusCtl(r)}</td></tr>`).join("")}
       </tbody></table></div></div>` : ""}`;
-    main.querySelectorAll("[data-go]").forEach((tr) => tr.onclick = () => go(tr.dataset.go));
+    main.querySelectorAll("[data-go]").forEach((tr) => tr.onclick = (e) => { if (e.target.closest(".status-sel")) return; go(tr.dataset.go); });
+    // approved from the list: the row leaves the "drafts" table
+    bindReportStatus(main, (id) => drafts.items.find((x) => x.id === id), (r) => { if (r.status !== "مسودة") { const el = main.querySelector(`[data-rst="${r.id}"]`); if (el) el.closest("tr").remove(); } });
   }
 
   // ------------------------------------------------------------------ patients
@@ -508,7 +510,7 @@
         <td class="nowrap"><div class="btn-row">${r.uploaded ? (r.files || []).slice(0, 1).map((f) => `<button class="btn sm" data-upfile="${r.id}" data-name="${esc(f)}">📎 فتح الملف</button>`).join("") : docButtons("plan", r)}${r.status === "سارية" && canClinical() ? `<a class="btn sm" href="#/plan/new?patient=${p.id}&renew=${r.id}">تجديد</a>` : ""}</div></td></tr>`;
     }).join("");
     const reportRows = reports.map((r) => `<tr><td><a href="#/report/${r.id}"><strong>${esc(typeName(r.report_type))}</strong></a></td><td class="nowrap">${d10(r.report_date)}</td>
-        <td>${statusPill(r.status)}</td><td class="nowrap">${r.next_due ? (r.followed_up ? `<span class="pill info">تمت المتابعة</span>` : `${d10(r.next_due)} ${duePill(daysLeft(r.next_due))}`) : "—"}</td>
+        <td>${reportStatusCtl(r)}</td><td class="nowrap">${r.next_due ? (r.followed_up ? `<span class="pill info">تمت المتابعة</span>` : `${d10(r.next_due)} ${duePill(daysLeft(r.next_due))}`) : "—"}</td>
         <td>${centerTag(r.center)}</td><td>${esc(r.expand && r.expand.therapist ? r.expand.therapist.name : "")}</td>
         <td class="nowrap"><div class="btn-row">${docButtons("report", r)}</div></td></tr>`).join("");
     main.innerHTML = `
@@ -551,6 +553,7 @@
     if (upR) upR.onclick = () => uploadReportModal(p);
     const up = main.querySelector("#upPlan");
     if (up) up.onclick = () => uploadPlanModal(p);
+    bindReportStatus(main, (id) => reports.find((x) => x.id === id));
     const nr = main.querySelector("#newR");
     if (nr) nr.onclick = () => modal("نوع التقرير", `<div id="types" class="bank" style="max-height:none">${REPORT_TYPES.map((t) => `<button class="chip" data-t="${esc(t)}" style="text-align:start"><strong>${esc(typeName(t))}</strong><div class="hint">${esc(REPORT_HINT[t])}</div></button>`).join("")}</div>`, {})
       .querySelector("#types").addEventListener("click", (e) => {
@@ -1652,6 +1655,27 @@
   }
 
   // ------------------------------------------------------------------ latest documents (admin)
+  // Report status in lists: the admin switches it between draft and final in place; everyone else sees the label
+  const REPORT_STATUS = ["مسودة", "نهائي"];
+  function reportStatusCtl(r) {
+    if (!isAdmin()) return statusPill(r.status);
+    return `<select class="input status-sel" data-rst="${r.id}" style="width:auto;padding:4px 8px" title="حالة التقرير">${REPORT_STATUS.map((st) => `<option value="${st}" ${r.status === st ? "selected" : ""}>${st}</option>`).join("")}</select>`;
+  }
+  function bindReportStatus(root, find, after) {
+    root.querySelectorAll("[data-rst]").forEach((sel) => {
+      sel.onclick = (e) => e.stopPropagation();
+      sel.onchange = async () => {
+        const r = find(sel.dataset.rst); if (!r) return;
+        const st = sel.value, old = r.status;
+        if (st === "نهائي" && !String(r.report_text || "").trim() && !r.uploaded) { toast("لا يمكن اعتماد تقرير بدون نص: افتحه واضغط «توليد النص» ثم احفظ.", true); sel.value = old; return; }
+        sel.disabled = true;
+        try { await pb.collection("reports").update(r.id, { status: st }); r.status = st; toast(st === "نهائي" ? "تم اعتماد التقرير (نهائي) ✓" : "رجع التقرير مسودة ✓"); if (after) after(r); }
+        catch (e) { sel.value = old; toast(errText(e), true); }
+        finally { sel.disabled = false; }
+      };
+    });
+  }
+
   async function pageDocs() {
     const q = qs();
     const main = shell("docs", `<div class="empty">جاري التحميل…</div>`);
@@ -1700,9 +1724,10 @@
           <td>${esc(x.t ? x.t.name : "")}</td>
           <td>${(() => { const a = authorOf(x.r); if (!a) return '<span class="hint">—</span>'; const other = a.id && a.id !== x.r.therapist;
             return `${other ? '<span class="pill warn" title="المستند باسم أخصائي آخر">✎</span> ' : ""}${esc(a.name)}${x.r.last_editor && x.r.last_editor !== a.id ? `<div class="hint">آخر تعديل: ${esc(uName(x.r.last_editor))}</div>` : ""}`; })()}</td>
-          <td>${statusPill(x.r.status)}</td>
+          <td>${x.kind === "report" ? reportStatusCtl(x.r) : statusPill(x.r.status)}</td>
           <td class="nowrap"><a class="btn sm" href="#/${x.kind}/${x.r.id}">فتح</a> <button class="btn sm" data-ex="${x.coll}:${x.r.id}:docx">Word</button><button class="btn sm" data-ex="${x.coll}:${x.r.id}:pdf">PDF</button>${isAdmin() ? ` <button class="btn sm danger" data-rm="${x.coll}:${x.r.id}" title="حذف">✕</button>` : ""}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">لا توجد مستندات مطابقة.</div>`;
+      bindReportStatus(main, (id) => (all.find((i) => i.kind === "report" && i.r.id === id) || {}).r);
       main.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => {
         const [coll, id] = b.dataset.rm.split(":");
         const x = all.find((i) => i.r.id === id);
