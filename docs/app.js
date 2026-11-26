@@ -21,7 +21,7 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-26b</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-26c</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
@@ -598,9 +598,17 @@
         if (!data.therapist) { toast("اختر اسم الأخصائي من معالجي هذا المركز.", true); return false; }
         if (!data.start_date || !data.end_date) { toast("حدد تاريخ البداية والانتهاء", true); return false; }
         if (f) data["files+"] = [f];
-        if (isNew && parsed && parsed.ok) { const blocks = window.PlanImport.clean(parsed.blocks); if (blocks.length) data.plan_data = { blocks, imported: true }; }
-        if (isNew) await pb.collection("plans").create(data); else await pb.collection("plans").update(rec.id, data);
-        toast(isNew ? "تم رفع الخطة إلى ملف الطفل ✓" : "تم الحفظ ✓"); route();
+        if (isNew && parsed && parsed.ok) {
+          const blocks = window.PlanImport.clean(parsed.blocks);
+          if (parsed.data && parsed.found && parsed.found.length) {
+            // the whole plan: filled items go to their fields, empty ones stay empty (no default values)
+            data.plan_data = { ...parsed.data, blocks, imported: "full" };
+            data.plan_text = parsed.markup; data.plan_lang = parsed.lang;
+          } else if (blocks.length) data.plan_data = { blocks, imported: true };
+        }
+        const saved = isNew ? await pb.collection("plans").create(data) : await pb.collection("plans").update(rec.id, data);
+        toast(isNew ? "تم رفع الخطة إلى ملف الطفل ✓" : "تم الحفظ ✓");
+        if (isNew && data.plan_data && data.plan_data.imported === "full") go(`#/plan/${saved.id}`); else route();
       },
     });
     m.querySelector('[name="center"]').onchange = (e) => { m.querySelector("#thBox").innerHTML = thChooserHtml(e.target.value, ""); };
@@ -611,13 +619,14 @@
       const box = m.querySelector("#piBox"), f = fi.files[0]; parsed = null;
       if (!f) return;
       box.textContent = "جاري قراءة الأهداف من الملف…";
-      parsed = await window.PlanImport.parse(f);
+      parsed = await window.PlanImport.parsePlanFull(f);
       if (!parsed.ok) { box.innerHTML = `<div class="note-box">${esc(window.PlanImport.REASON[parsed.reason] || "")}</div>`; return; }
       const inf = parsed.info, warn = [];
       if (inf.start) m.querySelector('[name="start_date"]').value = inf.start;
       if (inf.end) m.querySelector('[name="end_date"]').value = inf.end;
       if (inf.file_no && String(inf.file_no).trim() !== String(p.file_no).trim()) warn.push(`⚠ رقم الملف داخل الخطة (${inf.file_no}) لا يطابق ملف هذا الطفل (${p.file_no}). تأكد إنك رافع الخطة الصحيحة.`);
       box.innerHTML = (warn.length ? `<div class="note-box" style="margin-bottom:8px;color:#a15c07">${esc(warn.join(" "))}</div>` : "") + (inf.start || inf.end ? `<div class="hint">تمت قراءة التواريخ من الملف.</div>` : "") + `<div id="piList"></div>`;
+      if (parsed.found && parsed.found.length) box.insertAdjacentHTML("afterbegin", `<div class="note-box" style="margin-bottom:8px">✓ انقرأت الخطة من الملف، وكل بند معبّى رح ينزل بمكانه بالموقع (والفاضي بيضل فاضي): ${esc(parsed.found.join("، "))}.</div>`);
       window.PlanImport.review(box.querySelector("#piList"), parsed.blocks, esc);
     };
   }
@@ -646,9 +655,8 @@
         if (!data.report_date) { toast("حدد تاريخ التقرير", true); return false; }
         if (parsed && parsed.ok && parsed.type === type) {
           data.report_text = parsed.markup; data.report_lang = parsed.lang;
-          const def = form.defaults(FC.personCtx(p, "ar"));
-          Object.entries(parsed.values).forEach(([k, v]) => { def[k] = v && typeof v === "object" && !Array.isArray(v) && def[k] && typeof def[k] === "object" ? Object.assign({}, def[k], v) : v; });
-          data.assessment = def;
+          // only what is filled in the file goes into the fields; empty items stay empty (no default values)
+          data.assessment = Object.keys(parsed.values).length ? { ...parsed.values, imported: true } : {};
         }
         if (data.status === "نهائي" && !data.report_text) data.status = "مسودة";
         data["files+"] = [f];
@@ -688,7 +696,7 @@
         <div><div class="hint">الأخصائي</div>${esc(rec.expand && rec.expand.therapist ? rec.expand.therapist.name : "")}</div><div><div class="hint">الحالة</div>${esc(rec.status)}</div></div>
         <div style="margin-top:14px"><div class="hint"><strong>أهداف الخطة (تظهر للاختيار في ملاحظات الجلسات):</strong></div>
           ${((rec.plan_data || {}).blocks || []).length ? `<ol style="margin:6px 0">${window.Forms.plan.allGoals(rec.plan_data, "ar", FC.personCtx(patient, "ar")).map((g) => `<li>${esc(g.text)}</li>`).join("")}</ol>` : `<div class="hint">لا توجد أهداف مقروءة لهذه الخطة.</div>`}
-          ${canClinical() && (rec.files || []).some((f) => /\.docx$/i.test(f)) ? `<button class="btn sm" id="reread">⟳ قراءة الأهداف من ملف Word</button>` : ""}<div id="piBox2" style="margin-top:8px"></div></div>
+          ${canClinical() && (rec.files || []).some((f) => /\.docx$/i.test(f)) ? `<button class="btn sm" id="reread">⟳ قراءة الخطة كاملة من ملف Word</button>` : ""}<div id="piBox2" style="margin-top:8px"></div></div>
         <div style="margin-top:14px" id="fb">${filesBlock(rec, "plans")}</div>
         ${canClinical() ? `<div class="btn-row" style="margin-top:12px"><button class="btn" id="edU">تعديل البيانات</button><button class="btn primary" id="svF">حفظ المرفقات</button>${isAdmin() ? `<button class="btn danger" id="delU">حذف</button>` : ""}</div>` : ""}</div></div>`;
     const st = {};
@@ -700,15 +708,18 @@
       try {
         const r = await pb.call({ action: "fileData", token: pb.authStore.token, collection: "plans", id: rec.id, name });
         const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
-        const res = await window.PlanImport.parse(new File([bytes], r.name || "plan.docx"));
+        const res = await window.PlanImport.parsePlanFull(new File([bytes], r.name || "plan.docx"));
         const box = main.querySelector("#piBox2");
         if (!res.ok) { box.innerHTML = `<div class="note-box">${esc(window.PlanImport.REASON[res.reason] || "")}</div>`; rr.disabled = false; return; }
-        box.innerHTML = `<div id="piList"></div><button class="btn sm primary" id="piSave" style="margin-top:6px">حفظ الأهداف</button>`;
+        box.innerHTML = (res.found && res.found.length ? `<div class="note-box" style="margin-bottom:8px">انقرأ من الملف: ${esc(res.found.join("، "))}. الفاضي بيضل فاضي.</div>` : "") + `<div id="piList"></div><button class="btn sm primary" id="piSave" style="margin-top:6px">حفظ</button>`;
         window.PlanImport.review(box.querySelector("#piList"), res.blocks, esc);
         box.querySelector("#piSave").onclick = async () => {
           const blocks = window.PlanImport.clean(res.blocks);
-          if (!blocks.length) { toast("ما في أهداف للحفظ.", true); return; }
-          try { await pb.collection("plans").update(rec.id, { therapist: rec.therapist, center: rec.center, plan_data: { blocks, imported: true } }); toast("تم حفظ أهداف الخطة ✓"); route(); } catch (e) { toast(errText(e), true); }
+          const full = res.found && res.found.length;
+          if (!blocks.length && !full) { toast("ما في شي للحفظ.", true); return; }
+          const upd = full ? { therapist: rec.therapist, center: rec.center, plan_data: { ...res.data, blocks, imported: "full" }, plan_text: res.markup, plan_lang: res.lang }
+            : { therapist: rec.therapist, center: rec.center, plan_data: { blocks, imported: true } };
+          try { await pb.collection("plans").update(rec.id, upd); toast(full ? "انحفظت الخطة ببنودها ✓" : "تم حفظ أهداف الخطة ✓"); if (full) go(`#/plan/${rec.id}`); else route(); } catch (e) { toast(errText(e), true); }
         };
       } catch (e) { toast(errText(e), true); }
       rr.disabled = false;
@@ -817,7 +828,7 @@
     } else {
       rec = await pb.collection(coll).getOne(id, { expand: "therapist,author,last_editor" });
       patient = await pb.collection("patients").getOne(rec.patient);
-      if (isPlan && rec.uploaded) return pageUploadedPlan(rec, patient);
+      if (isPlan && rec.uploaded && !(rec.plan_data && rec.plan_data.imported === "full")) return pageUploadedPlan(rec, patient);
     }
     const kind = isPlan ? "plan" : KIND[rec.report_type] || "external";
     const form = window.Forms[kind];
@@ -961,6 +972,7 @@
       <div class="editor">
         <aside class="side panel"><div class="panel-body side-nav">${sideHtml}</div></aside>
         <div id="root">
+          ${isPlan && rec.uploaded && !sb ? `<div class="note-box" style="margin-bottom:12px">📎 خطة مرفوعة من ملف Word: كل بند كان معبّى بالملف نزل بمكانه، والبنود الفاضية ضلّت فاضية. النص بالأسفل منقول من الملف كما هو؛ «توليد النص» بيكتبه من جديد من البنود.</div>` : ""}
           ${!isPlan && rec.uploaded && !sb ? `<div class="note-box" style="margin-bottom:12px">📎 تقرير مرفوع من ملف: ${rec.report_text ? "النص منقول من الملف كما هو (بالأسفل)، والبنود اللي انقرأت تعبّت بالنموذج. «توليد النص» بيكتب النص من خيارات النموذج من جديد." : "الملف الأصلي محفوظ بالمرفقات بالأسفل. هذا النوع من الملفات ما بينقرأ تلقائياً."}</div>` : ""}${soapInfo}${kind === "progress" && !sb ? `<div style="margin-bottom:10px"><button class="btn" id="soapFill" type="button">⟳ تعبئة من ملاحظات الجلسات (SOAP)</button></div>` : ""}
           <div class="panel" id="topPanel"><div class="panel-head"><h2 class="grow">بيانات ${isPlan ? "الخطة" : "التقرير"}</h2></div><div class="panel-body"><div class="grid cols-3">${topFields}</div></div></div>
           <div id="formRoot">${formHtml}</div>

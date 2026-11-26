@@ -233,7 +233,7 @@
 
   const form = {
     kind: "plan",
-    DOMAINS, LTG_SKILLS, STG_BANK, MATERIALS, STRATEGIES, REINF, EVAL, CRIT_AR, CRIT_EN, evalText,
+    DOMAINS, LTG_SKILLS, STG_BANK, MATERIALS, STRATEGIES, REINF, EVAL, CRIT_AR, CRIT_EN, evalText, TOOLS, ORG,
     sections: [
       { id: "head", title: L("بيانات الخطة", "Plan details"), fields: [
         { id: "speech_dx", type: "text", label: L("تشخيص النطق واللغة", "Speech and language diagnosis"), suggest: DX, replace: true },

@@ -104,14 +104,14 @@
       const n = blocks.reduce((s, b) => s + b.stgs.length, 0);
       box.innerHTML = !n ? `<div class="hint">لم يتم العثور على أهداف في جدول «الأهداف قصيرة المدى».</div>` :
         `<div class="hint" style="margin-bottom:6px">راجع الأهداف المستخرجة (${n}) وصحّح أي خطأ قبل الحفظ:</div>` + blocks.map((b, bi) => `<div class="pi-block">
-          ${b.general_text ? `<div class="hint"><strong>الهدف العام:</strong> ${esc(b.general_text)}</div>` : ""}${b.ltg && b.ltg.ar ? `<div class="hint"><strong>طويل المدى:</strong> ${esc(b.ltg.ar)}</div>` : ""}
-          ${b.stgs.map((s, si) => `<div class="pi-row"><input class="input sm" data-pi="${bi}.${si}" value="${esc(s.ar)}">${s.eval === "achieved" ? '<span class="pill ok">أُنجز</span>' : s.eval === "partial" ? `<span class="pill info">${s.pct || ""}%</span>` : ""}<button type="button" class="btn sm danger" data-pidel="${bi}.${si}">✕</button></div>`).join("")}</div>`).join("");
+          ${b.general_text ? `<div class="hint"><strong>الهدف العام:</strong> ${esc(b.general_text)}</div>` : ""}${b.ltg && (b.ltg.ar || b.ltg.en) ? `<div class="hint"><strong>طويل المدى:</strong> ${esc(b.ltg.ar || b.ltg.en)}</div>` : ""}
+          ${b.stgs.map((s, si) => `<div class="pi-row"><input class="input sm" data-pi="${bi}.${si}" value="${esc(s.ar != null ? s.ar : s.en || "")}" dir="auto">${s.eval === "achieved" ? '<span class="pill ok">أُنجز</span>' : s.eval === "partial" ? `<span class="pill info">${s.pct || ""}%</span>` : ""}<button type="button" class="btn sm danger" data-pidel="${bi}.${si}">✕</button></div>`).join("")}</div>`).join("");
     };
-    box.oninput = (e) => { const k = e.target.dataset.pi; if (!k) return; const [bi, si] = k.split(".").map(Number); blocks[bi].stgs[si].ar = e.target.value; };
+    box.oninput = (e) => { const k = e.target.dataset.pi; if (!k) return; const [bi, si] = k.split(".").map(Number); const g = blocks[bi].stgs[si]; g[g.ar != null || g.en == null ? "ar" : "en"] = e.target.value; };
     box.onclick = (e) => { const b = e.target.closest("[data-pidel]"); if (!b) return; const [bi, si] = b.dataset.pidel.split(".").map(Number); blocks[bi].stgs.splice(si, 1); draw(); };
     draw();
   }
-  const clean = (blocks) => blocks.map((b) => ({ ...b, stgs: b.stgs.filter((s) => String(s.ar || "").trim()) })).filter((b) => b.stgs.length);
+  const clean = (blocks) => blocks.map((b) => ({ ...b, stgs: b.stgs.filter((s) => String(s.ar || s.en || "").trim()) })).filter((b) => b.stgs.length);
 
   // =====================================================================
   //  Any report made with the site's templates (Word): the document becomes the site's markup text
@@ -271,5 +271,140 @@
     return { ok: true, markup, lang: en > ar ? "en" : "ar", values: m.values, mapped: m.mapped, info: infoOf(markup) };
   }
 
-  window.PlanImport = { parse, review, clean, REASON, parseReport, docToMarkup, mapFields };
+  // =====================================================================
+  //  A whole plan made with the site's template (Word) -> the plan form's fields.
+  //  Only what is written in the file is filled; anything empty in the file stays empty on the site
+  //  (no default values are added).
+  // =====================================================================
+  function planFromMarkup(markup) {
+    const PF = window.Forms && window.Forms.plan; if (!PF) return { data: {}, found: [] };
+    const d = {}, found = [];
+    const en = (markup.match(/[A-Za-z]/g) || []).length > (markup.match(/[؀-ۿ]/g) || []).length, L = en ? "en" : "ar";
+    const set = (k, v, label) => { if (v == null || v === "" || (Array.isArray(v) && !v.length)) return; d[k] = v; if (label) found.push(label); };
+    const optBy = (opts, txt) => { const t = norm(String(txt).replace(/\*+/g, "")).toLowerCase(); return opts.find((o) => norm(o.ar).toLowerCase() === t || norm(o.en || "").toLowerCase() === t); };
+    const optsFrom = (opts, txt) => String(txt || "").split(/\s*\/\s*|،|,/).map((x) => optBy(opts, x)).filter(Boolean).map((o) => o.v);
+    const digits = (v) => (String(v || "").match(/\d+/) || [])[0] || "";
+    const blank = (v) => !String(v || "").replace(/[.…_\-\s]/g, "") || /^(لا يوجد|none)$/i.test(String(v).trim());
+    const lines = markup.split("\n");
+
+    // header table (::info4): label -> value
+    lines.forEach((l) => {
+      const m = l.match(/^([^:：|#*]{2,60})[:：]\s*(.*)$/); if (!m) return;
+      const k = norm(m[1]).toLowerCase(), v = m[2].trim();
+      if (/^(تشخيص النطق واللغة|speech & language diagnosis|speech and language diagnosis)$/.test(k)) set("speech_dx", v, "تشخيص النطق واللغة");
+      else if (/^(تشخيص العلاج الوظيفي|ot diagnosis)$/.test(k)) { if (v) { d.ot_dx = /^none$/i.test(v) ? "لا يوجد" : v; found.push("تشخيص العلاج الوظيفي"); } }
+      else if (/^(المشاركون في اعداد الخطة|prepared by)$/.test(k)) set("participants", v, "المشاركون في إعداد الخطة");
+      else if (/^(عدد الجلسات الاسبوعية|sessions per week)$/.test(k)) set("frequency", digits(v), "عدد الجلسات الأسبوعية");
+      else if (/^(مدة الجلسة|session length)$/.test(k)) set("duration", digits(v), "مدة الجلسة");
+      else if (/^(مدة الخطة|plan duration)$/.test(k)) set("months", digits(v), "مدة الخطة");
+      else if (/^(المقاييس المقننة المستخدمة.*|standardized measures used.*)$/.test(k)) { if (v) { d.standardized = /^none$/i.test(v) ? "لا يوجد" : v; found.push("المقاييس المقننة"); } }
+    });
+
+    // sections under ### headings
+    const secs = {}; let cur = null;
+    lines.forEach((l) => {
+      const t = l.trim(), h = t.match(/^#{2,4}\s+(.*)$/);
+      if (h) { cur = norm(h[1].replace(/[:：]\s*$/, "")).toLowerCase(); secs[cur] = secs[cur] || []; return; }
+      if (cur && t && !/^(::|\||\^\^|\[\[)/.test(t)) secs[cur].push(t);
+    });
+    const sec = (...names) => { const k = Object.keys(secs).find((x) => names.some((n) => x.startsWith(norm(n).toLowerCase()))); return k ? secs[k] : null; };
+    const bullets = (arr) => (arr || []).filter((x) => /^[-•]\s+/.test(x)).map((x) => x.replace(/^[-•]\s+/, "").trim());
+
+    const tools = sec("أدوات التقييم المستخدمة", "assessment tools used");
+    if (tools) { const t = tools.find((x) => !/^(المقاييس|standardized)/i.test(norm(x))); if (t && t !== "-") set("tools", optsFrom(PF.TOOLS, t), "أدوات التقييم"); }
+
+    const res = sec("نتائج تقييم النطق واللغة", "speech and language results");
+    if (res) {
+      const RES = [["r_receptive", /^(اللغة الاستقبالية|receptive language)/i, "اللغة الاستقبالية"], ["r_expressive", /^(اللغة التعبيرية|expressive language)/i, "اللغة التعبيرية"],
+        ["r_imitation", /^(التقليد الصوتي|vocal imitation)/i, "التقليد الصوتي"], ["r_articulation", /^(النطق وانتاج الاصوات|articulation and sound production)/i, "النطق وإنتاج الأصوات"]];
+      bullets(res).forEach((b) => { const m = b.replace(/\*\*/g, "").match(/^([^:：]+)[:：]\s*(.*)$/); if (!m) return; const r = RES.find((x) => x[1].test(norm(m[1]))); if (r) set(r[0], m[2].trim(), r[2]); });
+    }
+
+    const org = sec("فحص تركيب ووظيفة أعضاء النطق", "speech mechanism structure and function");
+    if (org) {
+      const o = {};
+      bullets(org).join(" / ").split(/\s*\/\s*/).forEach((part) => {
+        const m = part.match(/^([^:：]+)[:：]\s*(.*)$/); if (!m) return;
+        const row = optBy(PF.ORG, m[1]); if (!row) return;
+        const v = m[2].trim().replace(/\.$/, "");
+        o[row.v] = /^(سليم|normal)$/i.test(v) ? { s: "ok" } : { s: "bad", note: /^(غير سليم|atypical)$/i.test(v) ? "" : v };
+      });
+      if (Object.keys(o).length) { d.organs = o; found.push("فحص أعضاء النطق"); }
+    }
+
+    // fluency / voice / feeding: the standard "no problem" sentence -> none; any other text -> present + description
+    const NO = { fluency: /^(لا يوجد اي تاريخ مرضي او وراثي على اضطرابات الطلاقة|no medical or family history of fluency)/i, voice: /^(لا يوجد اي تاريخ مرضي على اضطرابات الصوت|no history of voice disorders)/i,
+      feeding: /^(تم فحص اعضاء النطق من حيث التركيب|the speech organs)/i };
+    [["fluency", ["اضطرابات الطلاقة", "fluency disorders"], "الطلاقة"], ["voice", ["اضطرابات الصوت", "voice disorders"], "الصوت"], ["feeding", ["تقييم البلع والتغذية", "swallowing and feeding"], "البلع والتغذية"]].forEach(([k, names, lab]) => {
+      const b = bullets(sec(...names)).join(" ").trim(); if (!b) return;
+      if (NO[k].test(norm(b))) d[k] = "none"; else { d[k] = "present"; d[k + "_note"] = b; }
+      found.push(lab);
+    });
+
+    [["strengths", ["نقاط القوة", "strengths"], "نقاط القوة"], ["weaknesses", ["نقاط الضعف", "weaknesses"], "نقاط الضعف"], ["justification", ["مبررات الخطة", "rationale for the individualized plan"], "مبررات الخطة"]]
+      .forEach(([k, names, lab]) => set(k, bullets(sec(...names)).join("\n"), lab));
+
+    // follow-up
+    const fu = sec("خطة المتابعة", "follow-up and re-evaluation plan");
+    if (fu) {
+      const all = norm(fu.join(" ")).toLowerCase();
+      if (/شهرية|monthly review/.test(all)) set("review", "monthly"); else if (/ربعية|quarterly review/.test(all)) set("review", "quarterly");
+      const ms = all.match(/(?:في|in at least)\s*(جلستين|\d+)\s*(?:جلسات )?(?:متتالية|consecutive)/);
+      if (ms) set("mastery_sessions", ms[1] === "جلستين" ? "2" : ms[1]);
+      if (d.review || d.mastery_sessions) found.push("المتابعة");
+    }
+    // guardian (consent table)
+    const g = markup.match(/(?:ولي الامر|ولي الأمر|parent)\s*\/\s*(?:الوصي|guardian)\s*\((?:الاسم وصلة القرابة|name and relationship)\)\s*[:：]\s*([^|]*)\|/i);
+    if (g && !blank(g[1])) set("guardian", g[1].trim(), "ولي الأمر");
+
+    // goals: general goal / long-term goal headings + the goals table of each long-term goal
+    const blocks = []; let general = "", ltg = "", curB = null, head = null;
+    lines.forEach((l) => {
+      const t = l.trim(), n = norm(t.replace(/\*\*/g, "").replace(/^#{1,4}\s+/, ""));
+      if (/^(الهدف العام للخطة|الهدف العام|general goal)/i.test(n)) { general = afterColon(t.replace(/^#{1,4}\s+/, "")); ltg = ""; curB = null; head = null; return; }
+      if (/^(الهدف طويل المدى|long-term goal)/i.test(n)) { ltg = afterColon(t); curB = null; head = null; return; }
+      if (!t.startsWith("|")) { head = null; return; }
+      const cells = t.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      const hn = cells.map((c) => norm(c).toLowerCase());
+      const gi = hn.findIndex((h) => /اهداف قصيرة المدى|الهدف قصير المدى|short-term goal/.test(h));
+      if (gi >= 0) {
+        const col = (re) => hn.findIndex((h) => re.test(h));
+        head = { gi, mat: col(/المواد|materials/), str: col(/الاستراتيجيات|strategies/), st: col(/تاريخ البدء|start date/), en: col(/تاريخ الانتهاء|end date/), rf: col(/التعزيز|reinforcement/), ev: col(/^التقييم$|^evaluation$/) };
+        const dom = optBy(PF.DOMAINS, general);
+        curB = { general: dom ? dom.v : "", general_text: dom ? "" : general, ltg: ltg ? { [L]: ltg } : {}, stgs: [] }; blocks.push(curB);
+        return;
+      }
+      if (!head || !curB) return;
+      const txt = (cells[head.gi] || "").trim(); if (!txt) return;
+      const stg = { [L]: txt };
+      if (head.mat >= 0) stg.materials = optsFrom(PF.MATERIALS, cells[head.mat]);
+      if (head.str >= 0) stg.strategies = optsFrom(PF.STRATEGIES, cells[head.str]);
+      if (head.rf >= 0) stg.reinf = optsFrom(PF.REINF, cells[head.rf]);
+      if (head.st >= 0 && toIso(cells[head.st])) stg.start = toIso(cells[head.st]);
+      if (head.en >= 0 && toIso(cells[head.en])) stg.end = toIso(cells[head.en]);
+      if (head.ev >= 0) Object.assign(stg, evalOf(cells[head.ev]));
+      curB.stgs.push(stg);
+    });
+    const kept = blocks.filter((b) => b.stgs.length || (b.ltg && b.ltg[L]));
+    if (kept.length) { d.blocks = kept; found.push(`الأهداف (${kept.reduce((s, b) => s + b.stgs.length, 0)} هدف قصير المدى)`); }
+    return { data: d, found, lang: L };
+  }
+  async function parsePlanFull(file) {
+    if (!/\.docx$/i.test(file.name)) return { ok: false, reason: "word-only" };
+    let xml;
+    try { xml = await unzipEntry(await file.arrayBuffer(), "word/document.xml"); }
+    catch (e) { return { ok: false, reason: e.message === "unsupported" ? "browser" : "bad-file" }; }
+    const body = new DOMParser().parseFromString(xml, "application/xml").getElementsByTagNameNS(W, "body")[0];
+    if (!body) return { ok: false, reason: "bad-file" };
+    const markup = docToMarkup(body), r = planFromMarkup(markup), info = {};
+    markup.split("\n").forEach((l) => {
+      const m = l.match(/^([^:：|]{2,40})[:：]\s*(.+)$/); if (!m) return; const k = norm(m[1]);
+      if (/^(تاريخ بدء الخطة|plan start date)$/i.test(k)) info.start = toIso(m[2]);
+      else if (/^(تاريخ انتهاء الخطة|plan end date)$/i.test(k)) info.end = toIso(m[2]);
+      else if (/^(رقم الملف|file no\.?)$/i.test(k)) info.file_no = m[2].trim();
+    });
+    return { ok: true, markup, lang: r.lang, data: r.data, found: r.found, info, blocks: r.data.blocks || [], count: (r.data.blocks || []).reduce((s, b) => s + b.stgs.length, 0) };
+  }
+
+  window.PlanImport = { parse, review, clean, REASON, parseReport, docToMarkup, mapFields, planFromMarkup, parsePlanFull };
 })();
