@@ -59,8 +59,8 @@
   // ------------------------------------------------------------------ list (patient page tab)
   function listHtml(notes, patient, canWrite) {
     const A = X();
-    return `<div class="panel-head"><span class="grow muted">ملاحظة لكل جلسة: الأهداف التي عملت عليها اليوم + الأداء + ملاحظتك. منها يُبنى التقرير المرحلي.</span>
-        ${canWrite ? `<a class="btn" href="#/report/new?patient=${patient.id}&type=${encodeURIComponent("تقرير تقييم مرحلي")}&soap=1">تقرير مرحلي من الملاحظات</a> <a class="btn primary" href="#/soap/new?patient=${patient.id}">+ ملاحظة جلسة</a>` : ""}</div>
+    return `<div class="panel-head"><span class="grow muted">ملاحظة لكل جلسة: الأهداف التي عملت عليها اليوم + الأداء + ملاحظتك. منها يُبنى تقرير تقييم الأداء الحالي.</span>
+        ${canWrite ? `<a class="btn" href="#/report/new?patient=${patient.id}&type=${encodeURIComponent("تقرير تقييم مرحلي")}&soap=1">تقرير تقييم الأداء الحالي من الملاحظات</a> <a class="btn primary" href="#/soap/new?patient=${patient.id}">+ ملاحظة جلسة</a>` : ""}</div>
       ${notes.length ? `<div class="qa-filters soap-export" style="padding:10px 16px;border-bottom:1px solid var(--line)"><strong>تنزيل كل الملاحظات بملف واحد:</strong>
           <label>من <input class="input sm" type="date" id="sxFrom"></label><label>إلى <input class="input sm" type="date" id="sxTo"></label>
           <span class="hint">(فارغ = كل الجلسات)</span><button class="btn sm" id="sxWord" type="button">Word</button><button class="btn sm" id="sxPdf" type="button">PDF</button></div>
@@ -97,7 +97,7 @@
     if (act) {
       const base = [A.d10(act.start_date), progs[0] ? A.d10(progs[0].report_date) : ""].sort().pop();
       const due = A.addMonths(base, 6), left = Math.round((new Date(due) - new Date(A.today())) / 86400000);
-      if (left <= 14 && due < A.d10(act.end_date)) progWarn = `<div class="note-box" style="margin-bottom:12px">${left < 0 ? `⚠ التقرير المرحلي الإلزامي متأخر منذ ${-left} يوم (كان مستحقاً ${due}).` : `التقرير المرحلي الإلزامي مستحق بتاريخ ${due}.`} <a href="#/report/new?patient=${patient.id}&type=${encodeURIComponent("تقرير تقييم مرحلي")}&soap=1">كتابته الآن من ملاحظات الجلسات</a></div>`;
+      if (left <= 14 && due < A.d10(act.end_date)) progWarn = `<div class="note-box" style="margin-bottom:12px">${left < 0 ? `⚠ تقرير تقييم الأداء الحالي الإلزامي متأخر منذ ${-left} يوم (كان مستحقاً ${due}).` : `تقرير تقييم الأداء الحالي الإلزامي مستحق بتاريخ ${due}.`} <a href="#/report/new?patient=${patient.id}&type=${encodeURIComponent("تقرير تقييم مرحلي")}&soap=1">كتابته الآن من ملاحظات الجلسات</a></div>`;
     }
     let dirty = false; const setD = () => { dirty = true; A.setDirty(true); const b = main.querySelector("#saveS"); if (b) { b.disabled = false; b.title = ""; } };
     const plan = () => plans.find((p) => p.id === n.plan);

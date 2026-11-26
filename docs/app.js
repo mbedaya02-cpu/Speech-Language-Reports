@@ -21,12 +21,17 @@
   const APP_NAME = "تقارير قسم النطق واللغة", APP_NAME_EN = "Speech and Language Reports";
   // Interface language (ar / en). Documents keep their own language toggle.
   const UI = window.I18N ? I18N.lang : "ar";
-  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-25b</span></footer>`;
+  const CREDIT = `<footer class="credit" data-notr dir="ltr">CREATED BY: MAHMOUD AHMAD JABER, 2026 <span style="opacity:.55">· v2026-11-26</span></footer>`;
   const tx = (o) => (o ? ((UI === "en" && o.en) ? o.en : (o.ar || o.en || "")) : "");
   const ROLE = { admin: "مدير النظام", therapist: "أخصائي نطق", reception: "استقبال" };
   // report_type -> form kind
   const KIND = { "تقرير الملاحظة الأولية": "scanning", "نموذج تحويل (Referral)": "referral", "تقرير التقييم الأولي": "initial", "تقرير تقييم": "evaluation", "تقرير إعادة تقييم": "evaluation", "تقرير تقييم مرحلي": "progress", "تقرير خروج": "discharge", "تقرير لجهة خارجية": "external" };
-  const REPORT_TYPES = Object.keys(KIND);
+  // retired types: no new documents of these kinds; documents already saved still open, export and print as before
+  const RETIRED_TYPES = ["تقرير التقييم الأولي", "تقرير إعادة تقييم", "تقرير لجهة خارجية"];
+  const REPORT_TYPES = Object.keys(KIND).filter((t) => !RETIRED_TYPES.includes(t));
+  // display names: the stored type stays the same (old documents, filters and reminders keep working); only the name shown changes
+  const TYPE_NAME = { "تقرير تقييم مرحلي": "تقرير تقييم الأداء الحالي" };
+  const typeName = (t) => TYPE_NAME[t] || t || "";
   const REPORT_HINT = { "تقرير الملاحظة الأولية": "Initial Scanning — انطباع الجلسة الأولى للأهل", "نموذج تحويل (Referral)": "تحويل لتخصص آخر: لمين، ليش، وشو المطلوب بالضبط", "تقرير التقييم الأولي": "نموذج مختصر (ST_IA)", "تقرير تقييم": "التقييم الشامل بالعربي أو الإنجليزي", "تقرير إعادة تقييم": "نفس نموذج التقييم الشامل", "تقرير تقييم مرحلي": "تقرير التقدم المرتبط بالخطة", "تقرير خروج": "عند إنهاء العلاج", "تقرير لجهة خارجية": "مدرسة / تأمين / طبيب" };
   const PLAN_STATUS = ["سارية", "تم التجديد", "منتهية", "ملغاة"];
   const PATIENT_STATUS = ["نشط", "متوقف مؤقتاً", "مُخرَّج"];
@@ -308,7 +313,7 @@
       pb.collection("plans").getFullList({ filter: andF(pb.filter('status = "سارية" && end_date <= {:l}', { l: limit }), notDischarged, cf), sort: "end_date", expand: "patient,therapist" }),
       pb.collection("reports").getFullList({ filter: andF(pb.filter('followed_up = false && next_due != "" && next_due <= {:l}', { l: limit }), notDischarged, cf), sort: "next_due", expand: "patient,therapist" }),
     ]);
-    const nextType = (t) => (["تقرير خروج", "تقرير لجهة خارجية"].includes(t) ? t : "تقرير تقييم مرحلي");
+    const nextType = (t) => (t === "تقرير خروج" ? t : "تقرير تقييم مرحلي");
     // mandatory progress report every 6 months (same rule as progressDue_ in Reminders.gs)
     const [actPlans, progs] = await Promise.all([
       pb.collection("plans").getFullList({ filter: andF('status = "سارية"', notDischarged, cf), expand: "patient,therapist" }),
@@ -323,11 +328,11 @@
       const due = addMonths(base, 6);
       if (due > d10(limit) || due >= d10(pl.end_date)) return;
       covered.add(pl.patient);
-      progDue.push({ kind: "progress", rec: pl, due, what: "تقرير تقييم مرحلي إلزامي (كل 6 أشهر)", next: "تقرير تقييم مرحلي", p: pl.expand && pl.expand.patient });
+      progDue.push({ kind: "progress", rec: pl, due, what: "تقرير تقييم الأداء الحالي إلزامي (كل 6 أشهر)", next: "تقرير تقييم مرحلي", p: pl.expand && pl.expand.patient });
     });
     return [...progDue,
       ...plans.map((r) => ({ kind: "plan", rec: r, due: d10(r.end_date), what: `تجديد الخطة / إعادة التقييم`, p: r.expand && r.expand.patient })),
-      ...reports.map((r) => ({ kind: "report", rec: r, due: d10(r.next_due), what: `تقرير مستحق (بعد ${r.report_type})`, next: nextType(r.report_type), p: r.expand && r.expand.patient })),
+      ...reports.map((r) => ({ kind: "report", rec: r, due: d10(r.next_due), what: `تقرير مستحق (بعد ${typeName(r.report_type)})`, next: nextType(r.report_type), p: r.expand && r.expand.patient })),
     ].map((i) => ({ ...i, days: daysLeft(i.due) })).sort((a, b) => a.days - b.days);
   }
 
@@ -371,7 +376,7 @@
         ${now.length ? dueTable(now) : `<div class="empty">لا يوجد شيء مستحق الآن. 👌</div>`}</div>
       ${later.length ? `<div class="panel"><details><summary class="panel-head" style="cursor:pointer"><h2 class="grow">قادمة خلال 30 يوماً (${later.length})</h2></summary>${dueTable(later)}</details></div>` : ""}
       ${drafts.items.length ? `<div class="panel"><div class="panel-head"><h2 class="grow">تقارير مسودة لم تُعتمد</h2></div><div class="table-wrap"><table class="t"><tbody>
-        ${drafts.items.map((r) => `<tr class="click" data-go="#/report/${r.id}"><td>${esc(r.report_type)}</td><td>${esc(r.expand && r.expand.patient ? r.expand.patient.full_name : "")}</td><td class="nowrap">${d10(r.report_date)}</td><td>${statusPill(r.status)}</td></tr>`).join("")}
+        ${drafts.items.map((r) => `<tr class="click" data-go="#/report/${r.id}"><td>${esc(typeName(r.report_type))}</td><td>${esc(r.expand && r.expand.patient ? r.expand.patient.full_name : "")}</td><td class="nowrap">${d10(r.report_date)}</td><td>${statusPill(r.status)}</td></tr>`).join("")}
       </tbody></table></div></div>` : ""}`;
     main.querySelectorAll("[data-go]").forEach((tr) => tr.onclick = () => go(tr.dataset.go));
   }
@@ -502,7 +507,7 @@
         <td>${esc(r.expand && r.expand.therapist ? r.expand.therapist.name : "")}</td>
         <td class="nowrap"><div class="btn-row">${r.uploaded ? (r.files || []).slice(0, 1).map((f) => `<button class="btn sm" data-upfile="${r.id}" data-name="${esc(f)}">📎 فتح الملف</button>`).join("") : docButtons("plan", r)}${r.status === "سارية" && canClinical() ? `<a class="btn sm" href="#/plan/new?patient=${p.id}&renew=${r.id}">تجديد</a>` : ""}</div></td></tr>`;
     }).join("");
-    const reportRows = reports.map((r) => `<tr><td><a href="#/report/${r.id}"><strong>${esc(r.report_type)}</strong></a></td><td class="nowrap">${d10(r.report_date)}</td>
+    const reportRows = reports.map((r) => `<tr><td><a href="#/report/${r.id}"><strong>${esc(typeName(r.report_type))}</strong></a></td><td class="nowrap">${d10(r.report_date)}</td>
         <td>${statusPill(r.status)}</td><td class="nowrap">${r.next_due ? (r.followed_up ? `<span class="pill info">تمت المتابعة</span>` : `${d10(r.next_due)} ${duePill(daysLeft(r.next_due))}`) : "—"}</td>
         <td>${centerTag(r.center)}</td><td>${esc(r.expand && r.expand.therapist ? r.expand.therapist.name : "")}</td>
         <td class="nowrap"><div class="btn-row">${docButtons("report", r)}</div></td></tr>`).join("");
@@ -520,7 +525,7 @@
           ${plans.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>الفترة</th><th>الحالة</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${planRows}</tbody></table></div>` : `<div class="empty">لا توجد خطط بعد.</div>`}
         </div>
         <div data-pane="reports" class="${tab === "reports" ? "" : "hidden"}">
-          <div class="panel-head"><span class="grow muted">تقييم أولي، تقرير تقييم، إعادة تقييم، تقييم مرحلي، خروج، أو تقرير لجهة خارجية</span>${canClinical() ? `<button class="btn" id="upRep">⬆ رفع تقرير جاهز (ملف)</button> <button class="btn primary" id="newR">+ تقرير جديد</button>` : ""}</div>
+          <div class="panel-head"><span class="grow muted">ملاحظة أولية، تحويل، تقرير تقييم، تقييم الأداء الحالي، أو خروج</span>${canClinical() ? `<button class="btn" id="upRep">⬆ رفع تقرير جاهز (ملف)</button> <button class="btn primary" id="newR">+ تقرير جديد</button>` : ""}</div>
           ${reports.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>التقرير التالي</th><th>المركز</th><th>الأخصائي</th><th></th></tr></thead><tbody>${reportRows}</tbody></table></div>` : `<div class="empty">لا توجد تقارير بعد.</div>`}
         </div>
         <div data-pane="soap" class="${tab === "soap" ? "" : "hidden"}">${window.SOAP ? window.SOAP.listHtml(soaps, p, canClinical()) : ""}</div>
@@ -547,7 +552,7 @@
     const up = main.querySelector("#upPlan");
     if (up) up.onclick = () => uploadPlanModal(p);
     const nr = main.querySelector("#newR");
-    if (nr) nr.onclick = () => modal("نوع التقرير", `<div id="types" class="bank" style="max-height:none">${REPORT_TYPES.map((t) => `<button class="chip" data-t="${esc(t)}" style="text-align:start"><strong>${esc(t)}</strong><div class="hint">${esc(REPORT_HINT[t])}</div></button>`).join("")}</div>`, {})
+    if (nr) nr.onclick = () => modal("نوع التقرير", `<div id="types" class="bank" style="max-height:none">${REPORT_TYPES.map((t) => `<button class="chip" data-t="${esc(t)}" style="text-align:start"><strong>${esc(typeName(t))}</strong><div class="hint">${esc(REPORT_HINT[t])}</div></button>`).join("")}</div>`, {})
       .querySelector("#types").addEventListener("click", (e) => {
         const c = e.target.closest(".chip"); if (!c) return;
         document.querySelector(".modal-back").remove();
@@ -620,7 +625,7 @@
     const center0 = p.center;
     const m = modal("رفع تقرير جاهز", `<div class="grid cols-2">
       <div class="field" style="grid-column:span 2"><label class="f">ملف التقرير (Word / PDF / صورة) *</label><input class="input" type="file" name="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"></div>
-      <div class="field"><label class="f">نوع التقرير *</label><select class="input" name="report_type">${REPORT_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">نوع التقرير *</label><select class="input" name="report_type">${REPORT_TYPES.map((t) => `<option value="${esc(t)}">${esc(typeName(t))}</option>`).join("")}</select></div>
       <div class="field"><label class="f">تاريخ التقرير *</label><input class="input" type="date" name="report_date" value="${today()}"></div>
       <div class="field"><label class="f">المركز</label><select class="input" name="center">${S.centers.map((c) => `<option value="${c.id}" ${center0 === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
       <div class="field"><label class="f">الأخصائي/ة</label><div id="thBox">${thChooserHtml(center0, "")}</div></div>
@@ -724,7 +729,7 @@
       const text = kind === "plan" ? r.plan_text : r.report_text;
       if (!text) { toast("لم يتم توليد نص بعد. افتح المستند واضغط «توليد النص» ثم احفظ.", true); return; }
       const lang = (kind === "plan" ? r.plan_lang : r.report_lang) || "ar";
-      const name = `${patient.file_no}_${kind === "plan" ? r.plan_type : r.report_type}_${d10(kind === "plan" ? r.start_date : r.report_date)}`;
+      const name = `${patient.file_no}_${kind === "plan" ? r.plan_type : typeName(r.report_type)}_${d10(kind === "plan" ? r.start_date : r.report_date)}`;
       await exportDoc(fmt, text, lang, r.center || patient.center, name, { collection: kind + "s", id: r.id });
     });
   }
@@ -799,7 +804,8 @@
             start_date: toPb(ns), end_date: toPb(addMonths(ns, Number(pd.months) || 6)), sessions_approved: prev.sessions_approved };
         }
       } else {
-        const type = q.type || "تقرير تقييم";
+        let type = q.type || "تقرير تقييم";
+        if (RETIRED_TYPES.includes(type)) { toast(`«${type}» ما عاد مستخدم بالموقع: اختر نوع تقرير تاني.`, true); history.back(); return; }
         const kind = KIND[type];
         rec = { patient: patient.id, center: patient.center, report_type: type, report_date: toPb(today()), status: "مسودة", report_lang: "ar", report_text: "",
           next_due: ["initial", "evaluation", "progress"].includes(kind) ? toPb(addMonths(today(), 6)) : "" };
@@ -921,7 +927,7 @@
     const formHtml = sections.map((s, i) => `<div class="panel${secHid(s)}" id="s-${s.id}"><div class="panel-head"><h2 class="section-title grow"><span class="n">${i + 1}</span>${esc(tx(s.title))}</h2>${s.title.en && UI !== "en" ? `<span class="hint" dir="ltr">${esc(s.title.en)}</span>` : ""}</div>
       <div class="panel-body">${s.fields.map(renderField).join("")}</div></div>`).join("");
 
-    const title = isPlan ? (id === "new" ? (rec.previous ? "تجديد الخطة التربوية الفردية" : "خطة تربوية فردية جديدة") : "الخطة التربوية الفردية") : rec.report_type;
+    const title = isPlan ? (id === "new" ? (rec.previous ? "تجديد الخطة التربوية الفردية" : "خطة تربوية فردية جديدة") : "الخطة التربوية الفردية") : typeName(rec.report_type);
     const topFields = isPlan ? `
         <div class="field"><label class="f">المركز (الترويسة)</label><select class="input" data-path="center">${S.centers.map((c) => `<option value="${c.id}" ${rec.center === c.id ? "selected" : ""}>${esc(c.name_ar)}</option>`).join("")}</select></div>
         <div class="field"><label class="f">نوع الخطة</label><select class="input" data-path="plan_type">${["الخطة التربوية الفردية", "أخرى"].map((t) => `<option ${rec.plan_type === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
@@ -1315,7 +1321,7 @@
       }
       return docText.value;
     };
-    const fname = () => `${patient.file_no}_${isPlan ? rec.plan_type : rec.report_type}_${d10(isPlan ? rec.start_date : rec.report_date)}`;
+    const fname = () => `${patient.file_no}_${isPlan ? rec.plan_type : typeName(rec.report_type)}_${d10(isPlan ? rec.start_date : rec.report_date)}`;
     if (main.querySelector("#wordBtn")) {
       // Saved document -> signature of its therapist; new/unsaved -> the therapist who is writing it.
       const sigFrom = () => (rec.id && !sandbox ? { collection: coll, id: rec.id } : { user: therapistRec().id || S.me.id });
@@ -1460,7 +1466,7 @@
           if (!rec.previous) {
             const same = await pb.collection(coll).getFullList({ filter: isPlan ? pb.filter("patient = {:p}", { p: patient.id }) : pb.filter("patient = {:p} && report_type = {:t}", { p: patient.id, t: rec.report_type }), sort: "-created" }).catch(() => []);
             const mine = same.find((x) => d10(x.created) === today() && !x.uploaded && (x.author === S.me.id || x.last_editor === S.me.id || x.therapist === S.me.id));
-            if (mine && confirm(`في «${isPlan ? (mine.plan_type || "خطة") : rec.report_type}» لهالطفل انحفظ اليوم.\n\nبدك تحفظ التعديلات عليه نفسه بدل ما ينعمل ملف جديد؟\n\nموافق = تعديل الملف المحفوظ   ·   إلغاء = ملف جديد منفصل`)) { target = mine.id; delete payload.client_key; }
+            if (mine && confirm(`في «${isPlan ? (mine.plan_type || "خطة") : typeName(rec.report_type)}» لهالطفل انحفظ اليوم.\n\nبدك تحفظ التعديلات عليه نفسه بدل ما ينعمل ملف جديد؟\n\nموافق = تعديل الملف المحفوظ   ·   إلغاء = ملف جديد منفصل`)) { target = mine.id; delete payload.client_key; }
           }
         }
         const saved = target ? await pb.collection(coll).update(target, payload) : await pb.collection(coll).create(payload);
@@ -1507,11 +1513,8 @@
         ${card(T("تقرير تقييم"), "تقرير تقييم", "التقييم الشامل بالعربي أو الإنجليزي", "Evaluation Report")}
         ${card(T("نموذج تحويل (Referral)"), "نموذج تحويل (Referral)", "تحويل مختصر وواضح لتخصص آخر: الجهة، المطلوب بالضبط، وملخص الحالة", "Referral")}
         ${card(T("تقرير الملاحظة الأولية"), "تقرير الملاحظة الأولية", "انطباع الجلسة الأولى للأهل: تقييم المهارات بأزرار وتقرير دافئ جاهز", "Initial Scanning")}
-        ${card(T("تقرير التقييم الأولي"), "تقرير التقييم الأولي", "النموذج المختصر", "نموذج ST_IA")}
-        ${card(T("تقرير تقييم مرحلي"), "تقرير تقييم مرحلي", "مرتبط بأهداف الخطة (خطة تجريبية جاهزة للمعاينة)", "نموذج PRO_REP")}
-        ${card(T("تقرير إعادة تقييم"), "تقرير إعادة تقييم", "نفس نموذج التقييم الشامل بعنوان إعادة تقييم", "")}
+        ${card(T("تقرير تقييم مرحلي"), "تقرير تقييم الأداء الحالي", "مرتبط بأهداف الخطة (خطة تجريبية جاهزة للمعاينة)", "نموذج PRO_REP")}
         ${card(T("تقرير خروج"), "تقرير خروج", "عند إنهاء العلاج", "")}
-        ${card(T("تقرير لجهة خارجية"), "تقرير لجهة خارجية", "مدرسة / تأمين / طبيب", "")}
       </div>
       <p class="hint" style="margin-top:14px">للعمل الحقيقي: المرضى ← افتح ملف المريض ← تبويب «الخطط» أو «التقارير».</p>`;
   }
@@ -1665,7 +1668,7 @@
     const authorOf = (r) => (r.author ? { id: r.author, name: uName(r.author) } : createdBy[r.id] ? { id: createdBy[r.id].user, name: createdBy[r.id].user_name } : null);
     const all = [
       ...plans.items.map((r) => ({ kind: "plan", coll: "plans", r, type: r.plan_type, date: d10(r.start_date), text: r.plan_text, lang: r.plan_lang || "ar" })),
-      ...reports.items.map((r) => ({ kind: "report", coll: "reports", r, type: r.report_type, date: d10(r.report_date), text: r.report_text, lang: r.report_lang || "ar" })),
+      ...reports.items.map((r) => ({ kind: "report", coll: "reports", r, type: typeName(r.report_type), date: d10(r.report_date), text: r.report_text, lang: r.report_lang || "ar" })),
     ].map((x) => ({ ...x, p: (x.r.expand && x.r.expand.patient) || {}, t: (x.r.expand && x.r.expand.therapist) || null }))
       // a therapist sees his own documents: in his name, written by him, or last edited by him
       .filter((x) => isAdmin() || x.r.therapist === S.me.id || (authorOf(x.r) || {}).id === S.me.id || x.r.last_editor === S.me.id)

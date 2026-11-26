@@ -64,7 +64,7 @@
     defaults() { return { gs: {}, next_days: "30" }; },
     generate(d, ctx) {
       const lang = ctx.lang, ar = lang === "ar", pc = ctx.pc, G = (s) => gx(s, pc);
-      const out = header(ar ? "تقرير تقييم مرحلي" : "Progress Report", ctx,
+      const out = header(ar ? "تقرير تقييم الأداء الحالي" : "Current Performance Evaluation Report", ctx,
         ar ? [`تاريخ بدء الخطة: ${dmy(ctx.planStart)}`, `المركز: ${ctx.centerShort}`, `رقم الملف: ${ctx.patient.file_no}`, `تاريخ التقرير: ${dmy(ctx.reportDate)}`]
            : [`Plan Start Date: ${dmy(ctx.planStart)}`, `Center: ${ctx.centerShort}`, `File No.: ${ctx.patient.file_no}`, `Report Date: ${dmy(ctx.reportDate)}`]);
       if ((d.prev_level || "").trim()) out.push("", "## " + (ar ? "المستوى السابق للأداء:" : "Previous Level of Performance:"), G(d.prev_level.trim()));

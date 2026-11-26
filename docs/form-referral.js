@@ -50,7 +50,7 @@
     O("cognitive", "مؤشرات صعوبات تعلم أو قدرات معرفية", "Signs of learning or cognitive difficulties"),
     O("emotional", "قلق أو انسحاب أو صعوبات انفعالية", "Anxiety, withdrawal or emotional difficulties"),
   ];
-  const ATTACH = [O("eval", "تقرير التقييم", "Evaluation report"), O("plan", "الخطة العلاجية الحالية", "Current therapy plan"), O("progress", "آخر تقرير مرحلي", "Latest progress report"), O("none", "لا يوجد", "None")];
+  const ATTACH = [O("eval", "تقرير التقييم", "Evaluation report"), O("plan", "الخطة العلاجية الحالية", "Current therapy plan"), O("progress", "آخر تقرير تقييم الأداء الحالي", "Latest current performance evaluation report"), O("none", "لا يوجد", "None")];
   const RETURN = [O("report", "تقرير مكتوب بالنتائج والتشخيص", "A written report of findings and diagnosis"), O("recs", "توصيات تساعدنا في خطة النطق واللغة", "Recommendations for our speech and language plan"),
     O("call", "تواصل مع الأخصائي المحوِّل لمناقشة الحالة", "A call with the referring therapist to discuss the case")];
 
